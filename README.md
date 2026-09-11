@@ -15,8 +15,9 @@ PCBA-leverancier wil, gebeurt daarna.
 
 ## Opzet
 
-    verkenning/     eenmalig script dat vastlegt wat de Electronics-API prijsgeeft
-    addin/          de add-in zelf (volgt)
+    verkenning/     eenmalige scripts die vastleggen wat de Electronics-API prijsgeeft
+    addin/          de add-in: MdeFusionTools
+    tests/          tests voor het BOM-deel, buiten Fusion te draaien
 
 Fusion-add-ins zijn Python (Fusion levert zijn eigen interpreter mee, 3.14).
 Een add-in bestaat uit een map met een `.py` en een `.manifest` met dezelfde

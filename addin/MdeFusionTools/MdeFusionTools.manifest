@@ -1,0 +1,13 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "addin",
+    "id": "b7d3e5a1-4c8f-4a2e-9d61-2f7c0b8e5a94",
+    "author": "MDE Automation B.V.",
+    "description": {
+        "": "PCB-uitvoer in een handeling: stuklijst als correcte CSV, daarna de CAM-export voor Gerber en pick-and-place."
+    },
+    "version": "0.1.0",
+    "runOnStartup": true,
+    "supportedOS": "windows",
+    "editEnabled": true
+}
