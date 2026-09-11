@@ -84,8 +84,9 @@ def stop(context):
 PCB_PRODUCTTYPE = "ElectronPcbDocProductType"
 PCB_WERKRUIMTE_ID = "BoardLayoutEnvironement"
 
-# De tabbladen waar de knop komt: waar je ontwerpt, en waar de CAM-uitvoer zit.
-PCB_TABBLADEN = ("EaglePcbDesign", "EaglePcbManufacturing")
+# Het tabblad waar de knop komt: Manufacturing, naast de CAM-uitvoer van Fusion
+# zelf. Daar hoort een uitvoerknop; op DESIGN stond hij alleen in de weg.
+PCB_TABBLADEN = ("EaglePcbManufacturing",)
 
 _geplaatst = []   # (werkruimte-id, tab-id) van elk paneel dat we hebben gemaakt
 
