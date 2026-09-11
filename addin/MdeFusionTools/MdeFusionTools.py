@@ -90,12 +90,6 @@ def run(context):
         _handlers.append(starten)
 
         _plaats_knop(definitie)
-
-        try:
-            _maak_palet()
-        except Exception:
-            # Dan maar bij de eerste klik; dat duurt alleen wat langer.
-            instellingen.log("Palet vooraf aanmaken mislukt:\n" + traceback.format_exc())
     except Exception:
         instellingen.log("Starten mislukt:\n" + traceback.format_exc())
         if _ui:
@@ -249,18 +243,18 @@ def _toon_palet():
     _palet_board = board
 
     palet = _maak_palet()
-    # De pagina staat al (het palet is bij het starten verborgen aangemaakt);
-    # alleen de stand verversen: ander board, andere lagen.
+    # Staat de pagina al, dan ververst dit de stand (ander board, andere lagen).
+    # Bij een nieuw palet gaat dit bericht verloren; de pagina vraagt de stand
+    # dan zelf op zodra Fusion het adsk-object heeft ingespoten.
     _stuur_stand(palet)
     palet.isVisible = True
 
 
 def _maak_palet():
-    """Het palet, verborgen aangemaakt zodra de add-in start.
+    """Het palet, aangemaakt bij de eerste klik.
 
-    De ingebouwde browser heeft een paar seconden nodig om op te starten; doe je
-    dat pas bij de eerste klik, dan staart de gebruiker een tijd naar een leeg
-    venster. Nu is de pagina al geladen als de knop wordt gebruikt.
+    Niet vooraf bij het starten van de add-in: een palet dat verborgen wordt
+    aangemaakt toont Fusion toch, en dan staat er een leeg venster zonder board.
     """
     palet = _ui.palettes.itemById(PALET_ID)
     if palet is not None:
