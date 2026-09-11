@@ -181,7 +181,22 @@ def _voer_uit():
     regels = bom.bouw(onderdelen)
 
     bom_pad = os.path.join(doelmap, f"{boardnaam}-BOM.csv")
-    bom.schrijf(bom_pad, regels)
+    try:
+        bom.schrijf(bom_pad, regels)
+    except PermissionError:
+        # Windows houdt een bestand vast zolang een ander programma het open heeft,
+        # en dat is bij een CSV vrijwel altijd Excel met de vorige versie.
+        instellingen.log(f"BOM niet geschreven, bestand vergrendeld: {bom_pad}")
+        _ui.messageBox(
+            f"De stuklijst kon niet worden geschreven omdat het bestand open staat in een "
+            f"ander programma, waarschijnlijk Excel:
+
+{bom_pad}
+
+"
+            "Sluit het daar en klik opnieuw op PCB-uitvoer.",
+            TITEL)
+        return
 
     eigen = sum(1 for o in onderdelen if o.populate and o.is_eigen)
     instellingen.log(f"BOM geschreven: {bom_pad} ({len(regels)} regels uit {len(onderdelen)} elementen, "
