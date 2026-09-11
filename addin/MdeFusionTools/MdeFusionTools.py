@@ -90,6 +90,12 @@ def run(context):
         _handlers.append(starten)
 
         _plaats_knop(definitie)
+
+        try:
+            _maak_palet()
+        except Exception:
+            # Dan maar bij de eerste klik; dat duurt alleen wat langer.
+            instellingen.log("Palet vooraf aanmaken mislukt:\n" + traceback.format_exc())
     except Exception:
         instellingen.log("Starten mislukt:\n" + traceback.format_exc())
         if _ui:
@@ -242,21 +248,40 @@ def _toon_palet():
         return
     _palet_board = board
 
-    palet = _ui.palettes.itemById(PALET_ID)
-    if palet is None:
-        # De ingebouwde browser wil schuine strepen; met backslashes geeft hij
-        # ERR_INVALID_URL.
-        html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "pcbuitvoer.html")
-        html = html.replace("\\", "/")
-        palet = _ui.palettes.add(PALET_ID, TITEL, html, False, True, True, 420, 300)
-        palet.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateFloating
-        van_html = _VanHtml()
-        palet.incomingFromHTML.add(van_html)
-        _handlers.append(van_html)
-    else:
-        # De pagina staat al; alleen de stand verversen (ander board, andere lagen).
-        _stuur_stand(palet)
+    palet = _maak_palet()
+    # De pagina staat al (het palet is bij het starten verborgen aangemaakt);
+    # alleen de stand verversen: ander board, andere lagen.
+    _stuur_stand(palet)
     palet.isVisible = True
+
+
+def _maak_palet():
+    """Het palet, verborgen aangemaakt zodra de add-in start.
+
+    De ingebouwde browser heeft een paar seconden nodig om op te starten; doe je
+    dat pas bij de eerste klik, dan staart de gebruiker een tijd naar een leeg
+    venster. Nu is de pagina al geladen als de knop wordt gebruikt.
+    """
+    palet = _ui.palettes.itemById(PALET_ID)
+    if palet is not None:
+        return palet
+
+    # De ingebouwde browser wil schuine strepen; met backslashes geeft hij
+    # ERR_INVALID_URL.
+    html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "pcbuitvoer.html")
+    html = html.replace("\\", "/")
+    palet = _ui.palettes.add(PALET_ID, TITEL, html, False, True, True, 420, 300)
+    palet.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateFloating
+    van_html = _VanHtml()
+    palet.incomingFromHTML.add(van_html)
+    _handlers.append(van_html)
+    return palet
+
+
+def _verberg_palet():
+    palet = _ui.palettes.itemById(PALET_ID)
+    if palet is not None:
+        palet.isVisible = False
 
 
 def _stand():
@@ -290,7 +315,10 @@ class _VanHtml(adsk.core.HTMLEventHandler):
             huidig = instellingen.laad()
 
             if actie == "klaar":
-                _stuur_stand(palet)
+                # De pagina meldt zich ook bij het verborgen aanmaken tijdens het
+                # starten; dan is er nog geen board en niets te tonen.
+                if _palet_board is not None:
+                    _stuur_stand(palet)
 
             elif actie in ("andere_uitvoermap", "andere_jobmap"):
                 dialoog = _ui.createFolderDialog()
@@ -336,6 +364,8 @@ class _Starten(adsk.core.CustomEventHandler):
 
     def notify(self, args):
         try:
+            # Hier sluiten, niet in de HTML-gebeurtenis: daar negeert Fusion het.
+            _verberg_palet()
             keuzes = json.loads(args.additionalInfo or "{}")
             board = adsk.electron.Board.cast(_app.activeProduct)
             if board is None:
