@@ -69,13 +69,17 @@ def run(context):
     _ui = _app.userInterface
 
     try:
+        iconen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "pcbuitvoer")
         definitie = _ui.commandDefinitions.itemById(COMMANDO_ID)
         if definitie is None:
             definitie = _ui.commandDefinitions.addButtonDefinition(
                 COMMANDO_ID,
                 "PCB-uitvoer",
-                "Gerber, drill, stuklijst en pick-and-place van dit board in een map, "
-                "met een gekozen CAM-job.")
+                "Gerber, drill, stuklijst en pick-and-place van dit board in een zip, "
+                "met een gekozen CAM-job.",
+                iconen)
+        else:
+            definitie.resourceFolder = iconen
 
         aangemaakt = _Aangemaakt()
         definitie.commandCreated.add(aangemaakt)
@@ -164,10 +168,15 @@ def _plaats_knop(definitie):
             if paneel is None:
                 paneel = tab.toolbarPanels.add(PANEEL_ID, "MDE")
 
-            if paneel.controls.itemById(COMMANDO_ID) is None:
+            knop = paneel.controls.itemById(COMMANDO_ID)
+            if knop is None:
                 knop = paneel.controls.addCommand(definitie)
-                knop.isPromoted = True
-                knop.isPromotedByDefault = True
+            # Elke keer opnieuw, niet alleen bij aanmaken: Fusion onthoudt de
+            # indeling van een paneel, en zonder promotie staat de knop verstopt
+            # in een uitklaplijst "MDE" in plaats van als grote knop.
+            knop.isPromotedByDefault = True
+            knop.isPromoted = True
+            knop.isVisible = True
 
             _geplaatst.append((werkruimte.id, tab_id))
             instellingen.log(f"Knop geplaatst: {werkruimte.id} / {tab_id} ({tab.name}).")
