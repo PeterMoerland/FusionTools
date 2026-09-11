@@ -4,9 +4,12 @@ Een knop op het tabblad Manufacturing van de PCB-editor. Die vraagt welke
 CAM-job je wilt gebruiken en zet dan alles voor productie en assemblage in een
 map per board:
 
-    <uitvoermap>\\<board>\\CAMOutputs\\GerberFiles\\...   Gerber en drill, via Electron.mfgexport
-    <uitvoermap>\\<board>\\CAMOutputs\\Assembly\\...      stuklijst en pick-and-place, door de add-in
-    <uitvoermap>\\<board>\\<board>_<datum>.zip           het geheel, zoals de CAM-processor het ook bundelt
+    <uitvoermap>\\<board>\\<board>_<datum>.zip
+
+met daarin, zoals de CAM-processor het ook bundelt:
+
+    CAMOutputs/GerberFiles/...   Gerber en drill, via Electron.mfgexport
+    CAMOutputs/Assembly/...      stuklijst en pick-and-place, door de add-in
 
 De CAM-processor van Fusion deed Gerber en pick-and-place goed, maar de
 stuklijst eruit was onbruikbaar door ontbrekende aanhalingstekens. Het
