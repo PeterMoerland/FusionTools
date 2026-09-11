@@ -33,8 +33,13 @@ def run(context):
         for i in range(defs.count):
             d = defs.item(i)
             if d.id.startswith("Electron::"):
-                ctrl = d.controlDefinition
-                staat = f"enabled={getattr(ctrl, 'isEnabled', '?')} visible={getattr(ctrl, 'isVisible', '?')}"
+                # Niet elk commando heeft een controlDefinition; sommige geven een
+                # InternalValidationError. Dat mag de rest niet tegenhouden.
+                try:
+                    ctrl = d.controlDefinition
+                    staat = f"enabled={ctrl.isEnabled} visible={ctrl.isVisible}"
+                except Exception as ex:
+                    staat = f"(geen controlDefinition: {type(ex).__name__})"
                 log(f"  {d.id}  |  {d.name}  |  {staat}")
         log()
 
