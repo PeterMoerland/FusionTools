@@ -67,10 +67,16 @@ def run(context):
             # een pad zonder spaties, de uitvoermap is een andere map dan die van de
             # job, zodat te zien is welke van de twee het commando gebruikt.
             shutil.rmtree(basis, ignore_errors=True)
+            # De job twee niveaus diep en de uitvoermap elders: zo is te zien of het
+            # commando naar de opgegeven map schrijft, naar de map van de job, of
+            # naar een map daarboven.
+            jobmap = os.path.join(basis, "jobs", "sub")
             os.makedirs(jobmap)
             os.makedirs(uitmap)
-            job = os.path.join(jobmap, "MDE_2_layer.cam")
-            shutil.copy2(r"Z:\Fusion PCB\CAM processor job files\MDE_2_layer.cam", job)
+            # De afgeslankte job: gerber, drill en assembly; geen ODB, afbeeldingen
+            # of tekeningen. Die staat naast dit script.
+            job = os.path.join(jobmap, "MDE_2_layer_slank.cam")
+            shutil.copy2(os.path.join(os.path.dirname(os.path.abspath(__file__)), "MDE_2_layer_slank.cam"), job)
 
             cmd = f"Electron.mfgexport {uitmap} {job}"
             log("STAP 1: export gestart")
