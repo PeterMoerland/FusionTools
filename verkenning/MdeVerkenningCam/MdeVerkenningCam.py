@@ -46,13 +46,18 @@ def run(context):
         # 2. Tekstcommando's die iets zeggen over wat er beschikbaar is. Onbekende
         #    commando's geven een foutmelding terug in plaats van een exception;
         #    die tekst is op zichzelf informatief.
-        for cmd in ("Electron /?", "NuElectronCommands /?", "PCB /?", "Translator /?", "TranslatorOptions /?", "Commands /?"):
+        proefmap = os.path.join(os.environ.get("LOCALAPPDATA", "."), "MDE", "FusionTools", "mfgexport-proef")
+        os.makedirs(proefmap, exist_ok=True)
+        job = r"Z:\Fusion PCB\CAM processor job files\MDE_2_layer.cam"
+        import time
+        for cmd in ("Electron /?", "Electron.mfgexport /?",
+                    f'Electron.mfgexport "{proefmap}" "{job}"'):
             log(f"executeTextCommand({cmd!r}):")
+            begin = time.time()
             try:
                 uit = app.executeTextCommand(cmd)
+                log(f"  (duur {time.time() - begin:.1f} s)")
                 uit = uit if uit is not None else "<None>"
-                if len(uit) > 4000:
-                    uit = uit[:4000] + f"\n  ... ({len(uit)} tekens in totaal)"
                 for regel in str(uit).splitlines() or ["<leeg>"]:
                     log("  " + regel)
             except Exception as ex:
@@ -60,7 +65,11 @@ def run(context):
             log()
 
         # 3. Als het tekstcommando geen dialoog opende, dan via de commandodefinitie.
-        log("(CAMExport niet opnieuw gestart; dat is al aangetoond)")
+        log("Inhoud van de proefmap na mfgexport:")
+        for wortel, mappen, bestanden in os.walk(proefmap):
+            for b in bestanden:
+                pad = os.path.join(wortel, b)
+                log(f"  {os.path.relpath(pad, proefmap)}  {os.path.getsize(pad)} bytes")
 
     except Exception:
         log()
