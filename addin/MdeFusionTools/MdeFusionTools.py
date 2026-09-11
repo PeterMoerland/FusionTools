@@ -37,11 +37,6 @@ COMMANDO_ID = "MDE_PcbUitvoer"
 PANEEL_ID = "MDE_Paneel"
 TITEL = "MDE PCB-uitvoer"
 
-INVOER_JOB = "job"
-INVOER_UITVOERMAP = "uitvoermap"
-INVOER_ANDERE_UITVOERMAP = "andere_uitvoermap"
-INVOER_ANDERE_JOBMAP = "andere_jobmap"
-
 STANDAARD_JOBMAP = r"Z:\Fusion PCB\CAM processor job files"
 
 # De export start een ander commando (mfgexport). Dat mag niet zolang ons eigen
@@ -120,6 +115,10 @@ def stop(context):
         definitie = _ui.commandDefinitions.itemById(COMMANDO_ID)
         if definitie:
             definitie.deleteMe()
+
+        palet = _ui.palettes.itemById(PALET_ID)
+        if palet:
+            palet.deleteMe()
 
         try:
             _app.unregisterCustomEvent(GEBEURTENIS_ID)
@@ -201,138 +200,136 @@ def _pcb_werkruimte():
 
 # ---------------------------------------------------------------------------
 # Het venster: welke job, welke map.
+#
+# Geen commandovenster maar een palet. In de PCB-editor is altijd een
+# EAGLE-commando actief dat het onze onderbreekt zodra de muis boven het board
+# komt; een commandovenster verdwijnt dan of voert zichzelf uit. Een palet is
+# een los venster van Fusion dat daar niets van merkt. De HTML ernaast praat
+# met deze code via adsk.fusionSendData / sendInfoToHTML.
 # ---------------------------------------------------------------------------
+
+PALET_ID = "MDE_PcbUitvoerPalet"
+
+_palet_board = None   # het board waarvoor het palet openstaat
+
 
 class _Aangemaakt(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
-            board = adsk.electron.Board.cast(_app.activeProduct)
-            if board is None:
-                _ui.messageBox("Open eerst het board (niet het schema).", TITEL)
-                return
-
-            opdracht = args.command
-            opdracht.okButtonText = "Exporteren"
-            opdracht.isRepeatable = False
-            # In de PCB-editor is altijd een EAGLE-commando actief dat het onze
-            # meteen onderbreekt. Standaard voert Fusion het commando dan uit
-            # alsof je op OK drukte; het venster leek daardoor niet te wachten.
-            opdracht.isExecutedWhenPreEmpted = False
-
-            huidig = instellingen.laad()
-            invoer = opdracht.commandInputs
-
-            keuzelijst = invoer.addDropDownCommandInput(
-                INVOER_JOB, "CAM-job", adsk.core.DropDownStyles.TextListDropDownStyle)
-            keuzelijst.tooltip = "De .cam-job van de CAM-processor waarmee Gerber en drill gemaakt worden."
-            _vul_jobs(keuzelijst, huidig, _koperlagen(board))
-
-            invoer.addBoolValueInput(INVOER_ANDERE_JOBMAP, "Andere map met jobs...", False, "", False)
-            invoer.itemById(INVOER_ANDERE_JOBMAP).tooltip = (
-                "Nu: " + _jobmap(huidig) + "\nKies een andere map met .cam-bestanden.")
-
-            boardnaam = _bestandsnaam(board.name) or "board"
-            tekst = invoer.addTextBoxCommandInput(
-                INVOER_UITVOERMAP, "Uitvoer in", _doelmap(huidig, boardnaam), 2, True)
-            tekst.tooltip = "Hier komt de zip <board>_<datum>.zip."
-
-            invoer.addBoolValueInput(INVOER_ANDERE_UITVOERMAP, "Andere uitvoermap...", False, "", False)
-
-            gewijzigd = _InvoerGewijzigd(boardnaam, _koperlagen(board))
-            opdracht.inputChanged.add(gewijzigd)
-            _handlers.append(gewijzigd)
-
-            uitvoeren = _Uitvoeren(board, boardnaam)
-            opdracht.execute.add(uitvoeren)
+            # Geen invoervelden, dus het commando voert meteen uit en toont het palet.
+            uitvoeren = _Uitvoeren()
+            args.command.execute.add(uitvoeren)
             _handlers.append(uitvoeren)
+            args.command.isAutoExecute = True
         except Exception:
             instellingen.log("commandCreated mislukt:\n" + traceback.format_exc())
-            _ui.messageBox("Het venster kon niet worden opgebouwd:\n\n" + traceback.format_exc(), TITEL)
-
-
-def _vul_jobs(keuzelijst, huidig, koperlagen):
-    """Zet de .cam-bestanden uit de jobmap in de keuzelijst, met de passende vooraf gekozen."""
-    keuzelijst.listItems.clear()
-    jobs = camjob.lijst(_jobmap(huidig))
-    gekozen = camjob.standaard(jobs, koperlagen, huidig.get("laatste_job"))
-    for job in jobs:
-        keuzelijst.listItems.add(os.path.basename(job), job == gekozen)
-    if not jobs:
-        keuzelijst.listItems.add("(geen .cam-bestanden in " + _jobmap(huidig) + ")", True)
-    return jobs
-
-
-class _InvoerGewijzigd(adsk.core.InputChangedEventHandler):
-    """De twee 'Andere map...'-vinkjes werken als knoppen: aanvinken opent de mapkeuze."""
-
-    def __init__(self, boardnaam, koperlagen):
-        super().__init__()
-        self._boardnaam = boardnaam
-        self._koperlagen = koperlagen
-
-    def notify(self, args):
-        try:
-            invoer = args.input
-            if invoer.id not in (INVOER_ANDERE_UITVOERMAP, INVOER_ANDERE_JOBMAP) or not invoer.value:
-                return
-            invoer.value = False
-
-            alle = args.inputs
-            huidig = instellingen.laad()
-            dialoog = _ui.createFolderDialog()
-
-            if invoer.id == INVOER_ANDERE_UITVOERMAP:
-                dialoog.title = "Kies de map waar de zip met de PCB-uitvoer komt"
-                if dialoog.showDialog() != adsk.core.DialogResults.DialogOK:
-                    return
-                huidig["uitvoermap"] = dialoog.folder
-                instellingen.bewaar(huidig)
-                alle.itemById(INVOER_UITVOERMAP).text = _doelmap(huidig, self._boardnaam)
-            else:
-                dialoog.title = "Kies de map met .cam-jobs van de CAM-processor"
-                if dialoog.showDialog() != adsk.core.DialogResults.DialogOK:
-                    return
-                huidig["jobmap"] = dialoog.folder
-                instellingen.bewaar(huidig)
-                _vul_jobs(alle.itemById(INVOER_JOB), huidig, self._koperlagen)
-                alle.itemById(INVOER_ANDERE_JOBMAP).tooltip = (
-                    "Nu: " + dialoog.folder + "\nKies een andere map met .cam-bestanden.")
-        except Exception:
-            instellingen.log("inputChanged mislukt:\n" + traceback.format_exc())
 
 
 class _Uitvoeren(adsk.core.CommandEventHandler):
-    def __init__(self, board, boardnaam):
-        super().__init__()
-        self._board = board
-        self._boardnaam = boardnaam
+    def notify(self, args):
+        try:
+            _toon_palet()
+        except Exception:
+            instellingen.log("Palet tonen mislukt:\n" + traceback.format_exc())
+            _ui.messageBox("Het venster kon niet worden geopend:\n\n" + traceback.format_exc(), TITEL)
+
+
+def _toon_palet():
+    global _palet_board
+    board = adsk.electron.Board.cast(_app.activeProduct)
+    if board is None:
+        _ui.messageBox("Open eerst het board (niet het schema).", TITEL)
+        return
+    _palet_board = board
+
+    palet = _ui.palettes.itemById(PALET_ID)
+    if palet is None:
+        html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "pcbuitvoer.html")
+        palet = _ui.palettes.add(PALET_ID, TITEL, html, False, True, True, 420, 300)
+        palet.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateFloating
+        van_html = _VanHtml()
+        palet.incomingFromHTML.add(van_html)
+        _handlers.append(van_html)
+    else:
+        # De pagina staat al; alleen de stand verversen (ander board, andere lagen).
+        _stuur_stand(palet)
+    palet.isVisible = True
+
+
+def _stand():
+    huidig = instellingen.laad()
+    board = _palet_board
+    boardnaam = _bestandsnaam(board.name) or "board"
+    lagen = _koperlagen(board)
+    jobs = camjob.lijst(_jobmap(huidig))
+    gekozen = camjob.standaard(jobs, lagen, huidig.get("laatste_job"))
+    return {
+        "board": boardnaam,
+        "koperlagen": lagen,
+        "jobmap": _jobmap(huidig),
+        "uitvoermap": _doelmap(huidig, boardnaam),
+        "jobs": [{"naam": os.path.basename(job), "pad": job, "gekozen": job == gekozen} for job in jobs],
+    }
+
+
+def _stuur_stand(palet):
+    palet.sendInfoToHTML("stand", json.dumps(_stand()))
+
+
+class _VanHtml(adsk.core.HTMLEventHandler):
+    """Berichten uit de pagina: klaar, andere map, exporteren, annuleren."""
 
     def notify(self, args):
         try:
-            invoer = args.command.commandInputs
-            keuze = invoer.itemById(INVOER_JOB).selectedItem
+            actie = args.action
+            gegevens = json.loads(args.data or "{}")
+            palet = _ui.palettes.itemById(PALET_ID)
             huidig = instellingen.laad()
-            job = os.path.join(_jobmap(huidig), keuze.name) if keuze else ""
-            if not job or not os.path.isfile(job):
-                _ui.messageBox("Kies eerst een CAM-job. Er staan geen .cam-bestanden in\n"
-                               + _jobmap(huidig), TITEL)
-                return
-            huidig["laatste_job"] = job
-            instellingen.bewaar(huidig)
 
-            # Niet hier exporteren (reentrancy), maar zodra dit commando klaar is.
-            _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps({
-                "boardnaam": self._boardnaam,
-                "job": job,
-                "doelmap": _doelmap(huidig, self._boardnaam)}))
+            if actie == "klaar":
+                _stuur_stand(palet)
+
+            elif actie in ("andere_uitvoermap", "andere_jobmap"):
+                dialoog = _ui.createFolderDialog()
+                if actie == "andere_uitvoermap":
+                    dialoog.title = "Kies de map waar de zip met de PCB-uitvoer komt"
+                    dialoog.initialDirectory = _doelmap(huidig, "")
+                else:
+                    dialoog.title = "Kies de map met .cam-jobs van de CAM-processor"
+                    dialoog.initialDirectory = _jobmap(huidig)
+                if dialoog.showDialog() == adsk.core.DialogResults.DialogOK:
+                    huidig["uitvoermap" if actie == "andere_uitvoermap" else "jobmap"] = dialoog.folder
+                    instellingen.bewaar(huidig)
+                _stuur_stand(palet)
+
+            elif actie == "exporteren":
+                job = gegevens.get("job", "")
+                if not job or not os.path.isfile(job):
+                    palet.sendInfoToHTML("melding", "Kies eerst een CAM-job.")
+                    return
+                huidig["laatste_job"] = job
+                instellingen.bewaar(huidig)
+                palet.isVisible = False
+                boardnaam = _bestandsnaam(_palet_board.name) or "board"
+                # Niet hier exporteren maar via de gebeurtenis: dan staat het
+                # palet al dicht en loopt er geen ander commando meer.
+                _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps({
+                    "boardnaam": boardnaam,
+                    "job": job,
+                    "doelmap": _doelmap(huidig, boardnaam)}))
+
+            elif actie == "annuleren":
+                palet.isVisible = False
+
+            args.returnData = "OK"
         except Exception:
-            instellingen.log("Uitvoeren mislukt:\n" + traceback.format_exc())
+            instellingen.log("Bericht uit het palet mislukt:\n" + traceback.format_exc())
             _ui.messageBox("Er ging iets mis:\n\n" + traceback.format_exc()
                            + "\n\nDetails staan in " + instellingen.LOG, TITEL)
 
 
 class _Starten(adsk.core.CustomEventHandler):
-    """Draait op de hoofddraad nadat het venster dicht is; hier mag mfgexport wel."""
+    """Draait op de hoofddraad nadat het palet dicht is; hier mag mfgexport."""
 
     def notify(self, args):
         try:

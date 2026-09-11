@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>PCB-uitvoer</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #f5f5f5; color: #222;
+               font: 13px "Segoe UI", system-ui, sans-serif; }
+  body { padding: 12px 14px; }
+  h1 { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+  label { display: block; font-size: 12px; color: #555; margin: 10px 0 3px; }
+  select { width: 100%; box-sizing: border-box; padding: 4px; font: inherit; }
+  .pad { display: flex; gap: 6px; align-items: center; }
+  .pad .tekst { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                padding: 4px 6px; background: #fff; border: 1px solid #ccc; }
+  button { font: inherit; padding: 4px 10px; cursor: pointer; }
+  .knoppen { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
+  .primair { background: #0696d7; color: #fff; border: 1px solid #0578ad; padding: 5px 16px; }
+  .primair:disabled { background: #9cc; border-color: #9cc; cursor: default; }
+  .info { font-size: 12px; color: #666; margin-top: 8px; }
+  .fout { color: #b00; }
+</style>
+</head>
+<body>
+  <h1 id="kop">PCB-uitvoer</h1>
+
+  <label for="job">CAM-job voor Gerber en drill</label>
+  <select id="job"></select>
+  <div class="pad" style="margin-top:4px">
+    <div class="tekst" id="jobmap" title=""></div>
+    <button type="button" onclick="stuur('andere_jobmap')">Andere map…</button>
+  </div>
+
+  <label>Uitvoer (zip komt hier)</label>
+  <div class="pad">
+    <div class="tekst" id="uitvoermap" title=""></div>
+    <button type="button" onclick="stuur('andere_uitvoermap')">Andere map…</button>
+  </div>
+
+  <div class="info" id="info"></div>
+
+  <div class="knoppen">
+    <button type="button" onclick="stuur('annuleren')">Annuleren</button>
+    <button type="button" class="primair" id="exporteren" onclick="exporteren()">Exporteren</button>
+  </div>
+
+<script>
+  function stuur(actie, gegevens) {
+    try { adsk.fusionSendData(actie, JSON.stringify(gegevens || {})); }
+    catch (e) { document.getElementById("info").textContent = "Geen verbinding met Fusion: " + e; }
+  }
+
+  function exporteren() {
+    var keuze = document.getElementById("job").value;
+    if (!keuze) { return; }
+    document.getElementById("exporteren").disabled = true;
+    document.getElementById("info").textContent = "Bezig…";
+    stuur("exporteren", { job: keuze });
+  }
+
+  function toon(stand) {
+    document.getElementById("kop").textContent = "PCB-uitvoer: " + stand.board;
+    var lijst = document.getElementById("job");
+    lijst.innerHTML = "";
+    (stand.jobs || []).forEach(function (job) {
+      var optie = document.createElement("option");
+      optie.value = job.pad;
+      optie.textContent = job.naam;
+      optie.selected = !!job.gekozen;
+      lijst.appendChild(optie);
+    });
+    var jobmap = document.getElementById("jobmap");
+    jobmap.textContent = stand.jobmap; jobmap.title = stand.jobmap;
+    var uit = document.getElementById("uitvoermap");
+    uit.textContent = stand.uitvoermap; uit.title = stand.uitvoermap;
+
+    var info = document.getElementById("info");
+    info.className = "info";
+    if (!stand.jobs || stand.jobs.length === 0) {
+      info.textContent = "Geen .cam-bestanden gevonden in deze map.";
+      info.className = "info fout";
+    } else if (stand.koperlagen) {
+      info.textContent = "Dit board heeft " + stand.koperlagen + " koperlagen.";
+    } else {
+      info.textContent = "";
+    }
+    document.getElementById("exporteren").disabled = !(stand.jobs && stand.jobs.length);
+  }
+
+  // Berichten vanuit Python (palette.sendInfoToHTML).
+  window.fusionJavaScriptHandler = {
+    handle: function (actie, gegevens) {
+      try {
+        if (actie === "stand") { toon(JSON.parse(gegevens)); }
+        else if (actie === "melding") {
+          var info = document.getElementById("info");
+          info.textContent = gegevens; info.className = "info fout";
+          document.getElementById("exporteren").disabled = false;
+        }
+      } catch (e) { document.getElementById("info").textContent = "Fout: " + e; }
+      return "OK";
+    }
+  };
+
+  // Zodra de pagina er is, om de stand vragen; Python antwoordt met 'stand'.
+  window.addEventListener("load", function () { stuur("klaar"); });
+</script>
+</body>
+</html>

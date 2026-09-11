@@ -31,8 +31,8 @@ Utilities → Add-Ins (Shift+S).
 ## Hoe het werkt
 
 De knop **PCB-uitvoer** staat op het tabblad Manufacturing van de PCB-editor
-(paneel MDE). Hij vraagt welke `.cam`-job je wilt gebruiken (vooraf gekozen op
-het aantal koperlagen) en zet dan `<uitvoermap>\<board>_<datum>.zip`
+(paneel MDE). Hij opent een palet dat vraagt welke `.cam`-job je wilt gebruiken
+(vooraf gekozen op het aantal koperlagen) en zet dan `<uitvoermap>\<board>_<datum>.zip`
 neer, met dezelfde indeling als de zip van Fusions eigen CAM-processor:
 
     CAMOutputs/GerberFiles/...      Gerber en drill, door de CAM-processor van Fusion
@@ -59,6 +59,13 @@ Wat daarover is vastgesteld (Fusion 2705.1.15):
   DESCRIPTION, PACKAGE_SIZE, MOUSER_PART_NUMBER, DATASHEET`, elk veld tussen
   aanhalingstekens. Onderdelen met fabrikant `MDE` (soldeerpads, montagegaten)
   blijven eruit; niet-geplaatste ook.
+
+Het keuzevenster is een palet (`resources/pcbuitvoer.html`) en geen
+commandovenster: in de PCB-editor is altijd een EAGLE-commando actief dat een
+API-commando onderbreekt zodra de muis boven het board komt, waardoor zo'n
+venster verdwijnt of zichzelf uitvoert. Een palet blijft staan. De export zelf
+start via een custom event nadat het palet dicht is, anders weigert Fusion
+mfgexport met "Execute failed due to reentrancy".
 
 Instellingen staan in `%APPDATA%\MDE\FusionTools\instellingen.json`
 (`uitvoermap`, `jobmap`, `laatste_job`); het logboek in
