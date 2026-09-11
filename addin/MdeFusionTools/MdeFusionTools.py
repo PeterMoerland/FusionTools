@@ -1,15 +1,23 @@
 """MDE FusionTools: PCB-uitvoer in een handeling.
 
-Een knop op de werkbalk van de PCB-editor die de stuklijst van het open board als correcte
-CSV wegschrijft en daarna de CAM-export van Fusion opent voor Gerber, drill en
-pick-and-place. De CAM-processor deed dat laatste al goed; alleen de BOM eruit
-was onbruikbaar door ontbrekende aanhalingstekens.
+Een knop op het tabblad Manufacturing van de PCB-editor. Die vraagt welke
+CAM-job je wilt gebruiken en zet dan alles voor productie en assemblage in een
+map per board:
+
+    <uitvoermap>\\<board>\\CAMOutputs\\GerberFiles\\...   Gerber en drill, via Electron.mfgexport
+    <uitvoermap>\\<board>\\CAMOutputs\\Assembly\\...      stuklijst en pick-and-place, door de add-in
+    <uitvoermap>\\<board>\\<board>_<datum>.zip           het geheel, zoals de CAM-processor het ook bundelt
+
+De CAM-processor van Fusion deed Gerber en pick-and-place goed, maar de
+stuklijst eruit was onbruikbaar door ontbrekende aanhalingstekens. Het
+tekstcommando Electron.mfgexport doet de CAM-processor zonder venster, maar
+levert alleen Gerber en drill; de rest maakt de add-in daarom zelf.
 """
 
-import json
+import datetime
 import os
 import re
-import threading
+import shutil
 import time
 import traceback
 
@@ -17,19 +25,25 @@ import adsk.core
 import adsk.electron
 
 from . import bom
-from . import campakket
+from . import camjob
+from . import cpl
 from . import instellingen
 
 COMMANDO_ID = "MDE_PcbUitvoer"
 PANEEL_ID = "MDE_Paneel"
 TITEL = "MDE PCB-uitvoer"
 
-# De zip van de CAM-export verschijnt pas nadat de gebruiker op Process heeft
-# gedrukt, dus na onze code. Een achtergronddraad wacht erop en meldt zich via
-# deze gebeurtenis weer op de hoofddraad; alleen daar mag de UI aangeraakt worden.
-GEBEURTENIS_ID = "MDE_ZipVervangen"
-WACHTTIJD_SECONDEN = 15 * 60
-PEILINTERVAL_SECONDEN = 2
+INVOER_JOB = "job"
+INVOER_UITVOERMAP = "uitvoermap"
+INVOER_ANDERE_UITVOERMAP = "andere_uitvoermap"
+INVOER_ANDERE_JOBMAP = "andere_jobmap"
+
+STANDAARD_JOBMAP = r"Z:\Fusion PCB\CAM processor job files"
+
+# mfgexport geeft meteen antwoord en schrijft de bestanden er vlak achteraan.
+# Zo lang wachten we hoogstens, met tussenpozen waarin Fusion zijn werk kan doen.
+MFGEXPORT_WACHTTIJD_SECONDEN = 30
+MFGEXPORT_PEIL_SECONDEN = 0.25
 
 _app = None
 _ui = None
@@ -37,8 +51,6 @@ _ui = None
 # Handlers moeten in leven blijven: laat je ze los, dan ruimt Python ze op en doet
 # de knop niets meer.
 _handlers = []
-_gebeurtenis = None
-_wachter = None
 
 
 def run(context):
@@ -52,18 +64,12 @@ def run(context):
             definitie = _ui.commandDefinitions.addButtonDefinition(
                 COMMANDO_ID,
                 "PCB-uitvoer",
-                "Schrijft de stuklijst als correcte CSV en opent de CAM-export "
-                "voor Gerber, drill en pick-and-place.")
+                "Gerber, drill, stuklijst en pick-and-place van dit board in een map, "
+                "met een gekozen CAM-job.")
 
         aangemaakt = _Aangemaakt()
         definitie.commandCreated.add(aangemaakt)
         _handlers.append(aangemaakt)
-
-        global _gebeurtenis
-        _gebeurtenis = _app.registerCustomEvent(GEBEURTENIS_ID)
-        klaar = _ZipKlaar()
-        _gebeurtenis.add(klaar)
-        _handlers.append(klaar)
 
         _plaats_knop(definitie)
     except Exception:
@@ -91,12 +97,6 @@ def stop(context):
         definitie = _ui.commandDefinitions.itemById(COMMANDO_ID)
         if definitie:
             definitie.deleteMe()
-
-        _stop_wachter()
-        try:
-            _app.unregisterCustomEvent(GEBEURTENIS_ID)
-        except Exception:
-            pass
 
         _handlers.clear()
         instellingen.log("Add-in gestopt.")
@@ -166,205 +166,246 @@ def _pcb_werkruimte():
     return _ui.workspaces.itemById(PCB_WERKRUIMTE_ID)
 
 
+# ---------------------------------------------------------------------------
+# Het venster: welke job, welke map.
+# ---------------------------------------------------------------------------
+
 class _Aangemaakt(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
-            uitvoeren = _Uitvoeren()
-            args.command.execute.add(uitvoeren)
+            board = adsk.electron.Board.cast(_app.activeProduct)
+            if board is None:
+                _ui.messageBox("Open eerst het board (niet het schema).", TITEL)
+                return
+
+            opdracht = args.command
+            opdracht.okButtonText = "Exporteren"
+            opdracht.isRepeatable = False
+
+            huidig = instellingen.laad()
+            invoer = opdracht.commandInputs
+
+            keuzelijst = invoer.addDropDownCommandInput(
+                INVOER_JOB, "CAM-job", adsk.core.DropDownStyles.TextListDropDownStyle)
+            keuzelijst.tooltip = "De .cam-job van de CAM-processor waarmee Gerber en drill gemaakt worden."
+            _vul_jobs(keuzelijst, huidig, _koperlagen(board))
+
+            invoer.addBoolValueInput(INVOER_ANDERE_JOBMAP, "Andere map met jobs...", False, "", False)
+            invoer.itemById(INVOER_ANDERE_JOBMAP).tooltip = (
+                "Nu: " + _jobmap(huidig) + "\nKies een andere map met .cam-bestanden.")
+
+            boardnaam = _bestandsnaam(board.name) or "board"
+            tekst = invoer.addTextBoxCommandInput(
+                INVOER_UITVOERMAP, "Uitvoer in", _doelmap(huidig, boardnaam), 2, True)
+            tekst.tooltip = "Per board een eigen submap in de uitvoermap."
+
+            invoer.addBoolValueInput(INVOER_ANDERE_UITVOERMAP, "Andere uitvoermap...", False, "", False)
+
+            gewijzigd = _InvoerGewijzigd(boardnaam, _koperlagen(board))
+            opdracht.inputChanged.add(gewijzigd)
+            _handlers.append(gewijzigd)
+
+            uitvoeren = _Uitvoeren(board, boardnaam)
+            opdracht.execute.add(uitvoeren)
             _handlers.append(uitvoeren)
-            # Geen invoervelden, dus geen dialoog: de knop doet meteen zijn werk.
-            args.command.isAutoExecute = True
         except Exception:
             instellingen.log("commandCreated mislukt:\n" + traceback.format_exc())
+            _ui.messageBox("Het venster kon niet worden opgebouwd:\n\n" + traceback.format_exc(), TITEL)
+
+
+def _vul_jobs(keuzelijst, huidig, koperlagen):
+    """Zet de .cam-bestanden uit de jobmap in de keuzelijst, met de passende vooraf gekozen."""
+    keuzelijst.listItems.clear()
+    jobs = camjob.lijst(_jobmap(huidig))
+    gekozen = camjob.standaard(jobs, koperlagen, huidig.get("laatste_job"))
+    for job in jobs:
+        keuzelijst.listItems.add(os.path.basename(job), job == gekozen)
+    if not jobs:
+        keuzelijst.listItems.add("(geen .cam-bestanden in " + _jobmap(huidig) + ")", True)
+    return jobs
+
+
+class _InvoerGewijzigd(adsk.core.InputChangedEventHandler):
+    """De twee 'Andere map...'-vinkjes werken als knoppen: aanvinken opent de mapkeuze."""
+
+    def __init__(self, boardnaam, koperlagen):
+        super().__init__()
+        self._boardnaam = boardnaam
+        self._koperlagen = koperlagen
+
+    def notify(self, args):
+        try:
+            invoer = args.input
+            if invoer.id not in (INVOER_ANDERE_UITVOERMAP, INVOER_ANDERE_JOBMAP) or not invoer.value:
+                return
+            invoer.value = False
+
+            alle = args.inputs
+            huidig = instellingen.laad()
+            dialoog = _ui.createFolderDialog()
+
+            if invoer.id == INVOER_ANDERE_UITVOERMAP:
+                dialoog.title = "Kies de map voor de PCB-uitvoer (per board komt er een submap)"
+                if dialoog.showDialog() != adsk.core.DialogResults.DialogOK:
+                    return
+                huidig["uitvoermap"] = dialoog.folder
+                instellingen.bewaar(huidig)
+                alle.itemById(INVOER_UITVOERMAP).text = _doelmap(huidig, self._boardnaam)
+            else:
+                dialoog.title = "Kies de map met .cam-jobs van de CAM-processor"
+                if dialoog.showDialog() != adsk.core.DialogResults.DialogOK:
+                    return
+                huidig["jobmap"] = dialoog.folder
+                instellingen.bewaar(huidig)
+                _vul_jobs(alle.itemById(INVOER_JOB), huidig, self._koperlagen)
+                alle.itemById(INVOER_ANDERE_JOBMAP).tooltip = (
+                    "Nu: " + dialoog.folder + "\nKies een andere map met .cam-bestanden.")
+        except Exception:
+            instellingen.log("inputChanged mislukt:\n" + traceback.format_exc())
 
 
 class _Uitvoeren(adsk.core.CommandEventHandler):
+    def __init__(self, board, boardnaam):
+        super().__init__()
+        self._board = board
+        self._boardnaam = boardnaam
+
     def notify(self, args):
         try:
-            _voer_uit()
+            invoer = args.command.commandInputs
+            keuze = invoer.itemById(INVOER_JOB).selectedItem
+            huidig = instellingen.laad()
+            job = os.path.join(_jobmap(huidig), keuze.name) if keuze else ""
+            if not job or not os.path.isfile(job):
+                _ui.messageBox("Kies eerst een CAM-job. Er staan geen .cam-bestanden in\n"
+                               + _jobmap(huidig), TITEL)
+                return
+            huidig["laatste_job"] = job
+            instellingen.bewaar(huidig)
+
+            _voer_uit(self._board, self._boardnaam, job, _doelmap(huidig, self._boardnaam))
         except Exception:
             instellingen.log("Uitvoeren mislukt:\n" + traceback.format_exc())
             _ui.messageBox("Er ging iets mis:\n\n" + traceback.format_exc()
                            + "\n\nDetails staan in " + instellingen.LOG, TITEL)
 
 
-def _voer_uit():
-    board = adsk.electron.Board.cast(_app.activeProduct)
-    if board is None:
-        _ui.messageBox("Open eerst het board (niet het schema).", TITEL)
-        return
+# ---------------------------------------------------------------------------
+# De export zelf.
+# ---------------------------------------------------------------------------
 
-    uitvoermap = _uitvoermap()
-    if not uitvoermap:
-        return
-
-    boardnaam = _bestandsnaam(board.name) or "board"
-    doelmap = os.path.join(uitvoermap, boardnaam)
+def _voer_uit(board, boardnaam, job, doelmap):
     os.makedirs(doelmap, exist_ok=True)
 
+    # Eerst de stuklijst opbouwen, zodat een vergrendeld bestand (Excel) de
+    # gebruiker tegenhoudt voordat er iets aan de map is veranderd.
     onderdelen = _onderdelen(board)
     regels = bom.bouw(onderdelen)
+    plaatsingen = _plaatsingen(board)
 
-    bom_pad = os.path.join(doelmap, f"{boardnaam}-BOM.csv")
-    try:
-        bom.schrijf(bom_pad, regels)
-    except PermissionError:
-        # Windows houdt een bestand vast zolang een ander programma het open heeft,
-        # en dat is bij een CSV vrijwel altijd Excel met de vorige versie.
-        instellingen.log(f"BOM niet geschreven, bestand vergrendeld: {bom_pad}")
-        _ui.messageBox(
-            "De stuklijst kon niet worden geschreven omdat het bestand open staat in een "
-            "ander programma, waarschijnlijk Excel:\n\n" + bom_pad + "\n\n"
-            "Sluit het daar en klik opnieuw op PCB-uitvoer.",
-            TITEL)
+    # 1. Gerber en drill via de CAM-processor zonder venster.
+    camoutputs, weggelaten = _mfgexport(job)
+    if camoutputs is None:
         return
+
+    # 2. De CAMOutputs-map naar de boardmap; wat er van een vorige keer stond gaat weg.
+    try:
+        camoutputs = camjob.verzamel(camoutputs, doelmap)
+    except PermissionError as ex:
+        instellingen.log(f"CAMOutputs niet te vervangen: {ex}")
+        _ui.messageBox("De vorige uitvoer in deze map kon niet worden vervangen; een bestand staat "
+                       "open in een ander programma:\n\n" + str(ex.filename or ex) +
+                       "\n\nSluit het en klik opnieuw op PCB-uitvoer.", TITEL)
+        return
+
+    # 3. Stuklijst en pick-and-place ernaast, in de Assembly-map die de
+    #    CAM-processor ook zou vullen.
+    assembly = os.path.join(camoutputs, camjob.ASSEMBLY)
+    os.makedirs(assembly, exist_ok=True)
+    bom_pad = os.path.join(assembly, f"{boardnaam}-BOM.csv")
+    bom.schrijf(bom_pad, regels)
+    voor = cpl.rijen(plaatsingen, achterkant=False)
+    achter = cpl.rijen(plaatsingen, achterkant=True)
+    cpl.schrijf(os.path.join(assembly, f"PnP_{boardnaam}_CPL_front.csv"), plaatsingen, achterkant=False)
+    cpl.schrijf(os.path.join(assembly, f"PnP_{boardnaam}_CPL_back.csv"), plaatsingen, achterkant=True)
+
+    # 4. Alles in een zip, met dezelfde naam en indeling als Fusion die zou geven.
+    zip_naam = f"{boardnaam}_{datetime.date.today():%Y-%m-%d}.zip"
+    aantal = camjob.maak_zip(camoutputs, os.path.join(doelmap, zip_naam))
 
     eigen = sum(1 for o in onderdelen if o.populate and o.is_eigen)
-    instellingen.log(f"BOM geschreven: {bom_pad} ({len(regels)} regels uit {len(onderdelen)} elementen, "
-                     f"{eigen} eigen onderdelen weggelaten)")
+    gerbers = len([r for r, _ in camjob.bestanden_in(camoutputs) if not r.startswith(camjob.ASSEMBLY)])
+    instellingen.log(f"PCB-uitvoer klaar in {doelmap}: {gerbers} Gerber/drill-bestanden (job {os.path.basename(job)}), "
+                     f"BOM {len(regels)} regels ({eigen} eigen weggelaten), CPL {len(voor)} voor / {len(achter)} achter, "
+                     f"zip {zip_naam} ({aantal} bestanden)")
 
-    # De map die het CAM-venster als uitvoer moet krijgen, staat op het klembord:
-    # de add-in kan die niet in het venster zetten, maar plakken is een handeling.
-    # Zo komt Fusions CAMOutputs-map naast de stuklijst terecht.
-    klembord = _naar_klembord(doelmap)
+    samenvatting = [
+        f"Gerber en drill: {gerbers} bestanden, met job {os.path.basename(job)}.",
+        f"Stuklijst: {len(regels)} regels; {eigen} eigen onderdelen (fabrikant {bom.EIGEN_FABRIKANT}) weggelaten.",
+        f"Pick-and-place: {len(voor)} onderdelen boven, {len(achter)} onder.",
+        f"Zip: {zip_naam} ({aantal} bestanden).",
+    ]
+    if weggelaten:
+        samenvatting.append("Niet gemaakt (kan niet zonder het CAM-venster): " + ", ".join(sorted(set(weggelaten))) + ".")
 
-    # Welke CAM-job past bij dit board, zodat de gebruiker niet hoeft te tellen.
-    lagen = _koperlagen(board)
-
-    # De CAM-export van Fusion zelf voor Gerber, drill en pick-and-place. Die
-    # onthoudt de laatst gebruikte job; de gebruiker hoeft alleen op Process te
-    # drukken en de map te kiezen.
-    cam_gestart = _start_cam()
-
-    # Zodra de zip van de CAM-export in de boardmap verschijnt, gaat onze
-    # stuklijst erin, in plaats van de kapotte die Fusion erin zet.
-    _start_wachter(doelmap, bom_pad)
-
-    stappen = []
-    if cam_gestart:
-        stappen.append("De CAM-export staat open.")
-    else:
-        stappen.append("De CAM-export kon niet automatisch geopend worden; start hem via Manufacturing.")
-    if lagen:
-        stappen.append(f"Dit board heeft {lagen} koperlagen; gebruik de job MDE_{lagen}_layer.cam.")
-    stappen.append(f"Kies als uitvoermap:\n{doelmap}"
-                   + ("\n(staat op het klembord, dus plakken volstaat)" if klembord else ""))
-    stappen.append("Zodra de zip daar verschijnt, wordt de stuklijst erin vervangen door deze. "
-                   "Je krijgt daar een melding van.")
-
-    _ui.messageBox(
-        f"Stuklijst geschreven:\n{bom_pad}\n\n"
-        f"{len(regels)} regels; {eigen} eigen onderdelen (fabrikant {bom.EIGEN_FABRIKANT}) weggelaten.\n\n"
-        + "\n\n".join(stappen),
-        TITEL)
+    antwoord = _ui.messageBox(
+        "PCB-uitvoer klaar:\n" + doelmap + "\n\n" + "\n".join(samenvatting) + "\n\nMap openen?",
+        TITEL,
+        adsk.core.MessageBoxButtonTypes.YesNoButtonType,
+        adsk.core.MessageBoxIconTypes.InformationIconType)
+    if antwoord == adsk.core.DialogResults.DialogYes:
+        os.startfile(doelmap)
 
 
-def _start_wachter(doelmap, bom_pad):
-    """Start een draad die wacht op de zip van de CAM-export en de stuklijst erin vervangt."""
-    global _wachter
-    _stop_wachter()
+def _mfgexport(job):
+    """Draait de CAM-processor zonder venster op een afgeslankte kopie van de job.
 
-    stop_signaal = threading.Event()
-    draad = threading.Thread(
-        target=_wacht_op_zip,
-        args=(doelmap, bom_pad, stop_signaal),
-        name="MDE-zipwachter",
-        daemon=True)
-    _wachter = (draad, stop_signaal)
-    draad.start()
-    instellingen.log(f"Wacht op CAM-zip in {doelmap} (maximaal {WACHTTIJD_SECONDEN // 60} minuten).")
-
-
-def _stop_wachter():
-    global _wachter
-    if _wachter is None:
-        return
-    draad, stop_signaal = _wachter
-    stop_signaal.set()
-    draad.join(timeout=PEILINTERVAL_SECONDEN + 1)
-    _wachter = None
-
-
-def _wacht_op_zip(doelmap, bom_pad, stop_signaal):
-    """Draait op de achtergrond. Raakt de UI niet aan; meldt zich via de gebeurtenis.
-
-    Alleen zips die na de start verschijnen tellen; wat er al lag blijft met rust.
-    Een zip is af als hij niet meer groeit en als zip te openen is; Fusion schrijft
-    hem in stappen.
+    Geeft (pad van CAMOutputs, weggelaten output_types) terug, of (None, ...)
+    na een melding aan de gebruiker.
     """
-    start = time.time()
+    werkmap = os.path.join(os.path.dirname(instellingen.LOG), "cam-werk")
+    shutil.rmtree(werkmap, ignore_errors=True)
+    job_kopie = os.path.join(werkmap, "job", os.path.basename(job))
+    weggelaten = camjob.slank(job, job_kopie)
+    uitmap = os.path.join(werkmap, "uit")
+    os.makedirs(uitmap)
+
+    commando = f"Electron.mfgexport {_argument(uitmap)} {_argument(job_kopie)}"
     try:
-        bestaand = set(_zips_in(doelmap))
-    except OSError:
-        bestaand = set()
-    groottes = {}
-
-    while not stop_signaal.is_set() and time.time() - start < WACHTTIJD_SECONDEN:
-        try:
-            for zip_pad in _zips_in(doelmap):
-                if zip_pad in bestaand:
-                    continue
-
-                stabiel, grootte = campakket.is_stabiel(zip_pad, groottes.get(zip_pad))
-                groottes[zip_pad] = grootte
-                if not stabiel:
-                    continue
-
-                if campakket.zoek_bom_lid(zip_pad) is None:
-                    # Wel een zip, maar geen stuklijst erin; dat is niet de onze.
-                    bestaand.add(zip_pad)
-                    continue
-
-                with open(bom_pad, "rb") as bestand:
-                    lid = campakket.vervang_bom(zip_pad, bestand.read())
-
-                _meld({"status": "vervangen", "zip": zip_pad, "lid": lid})
-                return
-        except Exception as ex:
-            _meld({"status": "fout", "tekst": f"{type(ex).__name__}: {ex}"})
-            return
-
-        stop_signaal.wait(PEILINTERVAL_SECONDEN)
-
-    if not stop_signaal.is_set():
-        _meld({"status": "verlopen", "map": doelmap})
-
-
-def _zips_in(map_):
-    return [os.path.join(map_, naam) for naam in os.listdir(map_)
-            if naam.lower().endswith(".zip") and not naam.startswith(".mde-")]
-
-
-def _meld(info):
-    """Vanuit de achtergronddraad naar de hoofddraad; daar toont _ZipKlaar het."""
-    try:
-        _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps(info))
+        antwoord = _app.executeTextCommand(commando)
     except Exception as ex:
-        instellingen.log(f"Gebeurtenis niet afgevuurd: {type(ex).__name__}: {ex} | {info}")
+        antwoord = f"{type(ex).__name__}: {ex}"
+    instellingen.log(f"{commando} -> {antwoord!r}")
+
+    # Het commando geeft meteen antwoord; de bestanden volgen er vlak achteraan.
+    # Wachten tot de map er is en niet meer groeit, en Fusion intussen zijn
+    # gang laten gaan (doEvents), anders wacht het misschien op zichzelf.
+    camoutputs = None
+    vorige = None
+    einde = time.time() + MFGEXPORT_WACHTTIJD_SECONDEN
+    while time.time() < einde:
+        adsk.doEvents()
+        time.sleep(MFGEXPORT_PEIL_SECONDEN)
+        camoutputs = camjob.zoek_camoutputs(werkmap)
+        if camoutputs is None:
+            continue
+        stand = camjob.bestanden_in(camoutputs)
+        if stand and stand == vorige:
+            break
+        vorige = stand
+
+    if camoutputs is None or not camjob.bestanden_in(camoutputs):
+        _ui.messageBox(
+            "De CAM-processor heeft geen Gerber-bestanden opgeleverd.\n\n"
+            f"Job: {job}\nAntwoord van Fusion: {antwoord}\n\n"
+            "Details staan in " + instellingen.LOG, TITEL)
+        return None, weggelaten
+    return camoutputs, weggelaten
 
 
-class _ZipKlaar(adsk.core.CustomEventHandler):
-    def notify(self, args):
-        try:
-            info = json.loads(args.additionalInfo or "{}")
-            status = info.get("status")
-
-            if status == "vervangen":
-                instellingen.log(f"Stuklijst vervangen in {info['zip']} ({info['lid']}).")
-                _ui.messageBox(
-                    "De stuklijst in de CAM-zip is vervangen door de correcte:\n\n"
-                    + info["zip"] + "\n\n" + info["lid"],
-                    TITEL)
-            elif status == "verlopen":
-                instellingen.log(f"Geen CAM-zip verschenen in {info['map']}; wachten gestopt.")
-            else:
-                instellingen.log(f"Vervangen in de CAM-zip mislukt: {info.get('tekst')}")
-                _ui.messageBox(
-                    "De stuklijst kon niet in de CAM-zip gezet worden:\n\n" + str(info.get("tekst"))
-                    + "\n\nDe losse stuklijst staat wel in de boardmap.",
-                    TITEL)
-        except Exception:
-            instellingen.log("Afhandelen van de zipgebeurtenis mislukt:\n" + traceback.format_exc())
+def _argument(pad):
+    """Een pad als argument voor het tekstcommando; alleen quoten als het moet."""
+    return f'"{pad}"' if " " in pad else pad
 
 
 def _koperlagen(board):
@@ -375,50 +416,6 @@ def _koperlagen(board):
                    if 1 <= lagen.item(i).number <= 16 and lagen.item(i).used)
     except Exception:
         return 0
-
-
-def _naar_klembord(tekst):
-    """Zet tekst op het Windows-klembord. Geeft terug of dat gelukt is."""
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
-        CF_UNICODETEXT = 13
-        GMEM_MOVEABLE = 0x0002
-
-        # Zonder deze typen neemt ctypes een 32-bits int aan voor handles en
-        # pointers, en op 64-bits Windows wordt het adres dan afgekapt: een
-        # access violation op adres 0.
-        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-        kernel32.GlobalLock.restype = ctypes.c_void_p
-        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-        user32.OpenClipboard.argtypes = [wintypes.HWND]
-        user32.SetClipboardData.restype = wintypes.HANDLE
-        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-
-        gegevens = tekst.encode("utf-16-le") + b"\x00\x00"
-        if not user32.OpenClipboard(None):
-            return False
-        try:
-            user32.EmptyClipboard()
-            handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(gegevens))
-            adres = kernel32.GlobalLock(handle)
-            if not adres:
-                return False
-            ctypes.memmove(adres, gegevens, len(gegevens))
-            kernel32.GlobalUnlock(handle)
-            if not user32.SetClipboardData(CF_UNICODETEXT, handle):
-                return False
-        finally:
-            user32.CloseClipboard()
-        return True
-    except Exception as ex:
-        instellingen.log(f"Klembord niet gezet: {type(ex).__name__}: {ex}")
-        return False
 
 
 def _onderdelen(board):
@@ -435,45 +432,46 @@ def _onderdelen(board):
         except Exception:
             instellingen.log(f"Attributen van {el.name} niet leesbaar:\n" + traceback.format_exc())
 
-        try:
-            footprint = el.package.name
-        except Exception:
-            footprint = ""
-
         resultaat.append(bom.Onderdeel(
             naam=el.name,
             waarde=el.value or "",
-            footprint=footprint or "",
+            footprint=_footprint(el),
             populate=bool(el.populate),
             attributen=attributen))
     return resultaat
 
 
-def _uitvoermap():
-    """De map uit de instellingen, of de gebruiker laten kiezen als die er nog niet is."""
-    huidig = instellingen.laad()
-    map_ = huidig.get("uitvoermap", "")
-    if map_ and os.path.isdir(map_):
-        return map_
+def _plaatsingen(board):
+    resultaat = []
+    elementen = board.elements
+    for i in range(elementen.count):
+        el = elementen.item(i)
+        resultaat.append(cpl.Plaatsing(
+            naam=el.name,
+            x=el.x,
+            y=el.y,
+            hoek=float(el.angle),
+            achterkant=bool(el.mirror),
+            waarde=el.value or "",
+            footprint=_footprint(el),
+            populate=bool(el.populate)))
+    return resultaat
 
-    dialoog = _ui.createFolderDialog()
-    dialoog.title = "Kies de map voor de PCB-uitvoer (per board komt er een submap)"
-    if dialoog.showDialog() != adsk.core.DialogResults.DialogOK:
-        return None
 
-    huidig["uitvoermap"] = dialoog.folder
-    instellingen.bewaar(huidig)
-    return dialoog.folder
-
-
-def _start_cam():
+def _footprint(el):
     try:
-        antwoord = _app.executeTextCommand("Commands.Start Electron::CAMExport")
-        instellingen.log(f"CAM-export geopend: {antwoord}")
-        return True
-    except Exception as ex:
-        instellingen.log(f"CAM-export openen mislukt: {ex}")
-        return False
+        return el.package.name or ""
+    except Exception:
+        return ""
+
+
+def _jobmap(huidig):
+    return huidig.get("jobmap") or STANDAARD_JOBMAP
+
+
+def _doelmap(huidig, boardnaam):
+    uitvoermap = huidig.get("uitvoermap") or os.path.join(os.path.expanduser("~"), "Downloads")
+    return os.path.join(uitvoermap, boardnaam)
 
 
 def _bestandsnaam(naam):

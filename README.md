@@ -28,7 +28,50 @@ naam, geplaatst in:
 Scripts staan in `...\API\Scripts\<Naam>\` en zijn te starten via
 Utilities → Add-Ins (Shift+S).
 
-## Stand van zaken
+## Hoe het werkt
 
-Verkenning. Zie `verkenning/` en het rapport dat het script wegschrijft naar
-`%LOCALAPPDATA%\MDE\FusionTools\verkenning.txt`.
+De knop **PCB-uitvoer** staat op het tabblad Manufacturing van de PCB-editor
+(paneel MDE). Hij vraagt welke `.cam`-job je wilt gebruiken (vooraf gekozen op
+het aantal koperlagen) en zet dan in `<uitvoermap>\<board>\`:
+
+    CAMOutputs\GerberFiles\...      Gerber en drill, door de CAM-processor van Fusion
+    CAMOutputs\Assembly\...         stuklijst (BOM) en pick-and-place (CPL), door de add-in
+    <board>_<datum>.zip             het geheel, met dezelfde paden als Fusions eigen zip
+
+De CAM-processor draait zonder venster via het interne tekstcommando
+
+    Electron.mfgexport <uitvoermap> <job.cam>
+
+Wat daarover is vastgesteld (Fusion 2705.1.15):
+
+- Het geeft direct `CAM output generated.` terug en schrijft de bestanden er
+  vlak achteraan als losse bestanden, geen zip.
+- Ze komen niet in de opgegeven map maar ernaast:
+  `<bovenliggende map>\<jobnaam>\<jobnaam>.gbr\CAMOutputs\...`. De add-in
+  zoekt de map `CAMOutputs` daarom op en verplaatst hem naar de boardmap.
+- Alleen de secties `gerber` en `drill` leveren iets op. `odb++`, `image` en
+  `drawing` geven een foutvenster; `assembly` levert stil niets. De add-in
+  geeft het commando een afgeslankte kopie van de job en maakt BOM en CPL zelf.
+- De CPL heeft precies het formaat van Fusion: `Name,X,Y,Angle,Value,Package`,
+  millimeters met twee decimalen (interne eenheid 1/320000 mm), een bestand per
+  zijde (`PnP_<board>_CPL_front.csv` en `_back.csv`), gewone tekstsortering.
+- De BOM is algemeen: `Aantal, Referenties, Waarde, Footprint, MPN, MANUFACTURER,
+  DESCRIPTION, PACKAGE_SIZE, MOUSER_PART_NUMBER, DATASHEET`, elk veld tussen
+  aanhalingstekens. Onderdelen met fabrikant `MDE` (soldeerpads, montagegaten)
+  blijven eruit; niet-geplaatste ook.
+
+Instellingen staan in `%APPDATA%\MDE\FusionTools\instellingen.json`
+(`uitvoermap`, `jobmap`, `laatste_job`); het logboek in
+`%LOCALAPPDATA%\MDE\FusionToolsusiontools.log`. De standaard jobmap is
+`Z:\Fusion PCB\CAM processor job files`.
+
+## Installeren
+
+Kopieer `addin\MdeFusionTools` naar
+`%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\MdeFusionTools\`
+en zet de add-in aan via Utilities → Add-Ins (Shift+S); hij start daarna mee
+met Fusion.
+
+## Tests
+
+    python -m unittest discover -s tests -v
