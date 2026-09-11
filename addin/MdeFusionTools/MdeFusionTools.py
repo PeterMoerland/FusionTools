@@ -1,6 +1,6 @@
 """MDE FusionTools: PCB-uitvoer in een handeling.
 
-Een knop in de PCB-werkruimte die de stuklijst van het open board als correcte
+Een knop op de Quick Access Toolbar die de stuklijst van het open board als correcte
 CSV wegschrijft en daarna de CAM-export van Fusion opent voor Gerber, drill en
 pick-and-place. De CAM-processor deed dat laatste al goed; alleen de BOM eruit
 was onbruikbaar door ontbrekende aanhalingstekens.
@@ -17,7 +17,6 @@ from . import bom
 from . import instellingen
 
 COMMANDO_ID = "MDE_PcbUitvoer"
-PANEEL_ID = "MDE_Paneel"
 TITEL = "MDE PCB-uitvoer"
 
 _app = None
@@ -26,7 +25,6 @@ _ui = None
 # Handlers moeten in leven blijven: laat je ze los, dan ruimt Python ze op en doet
 # de knop niets meer.
 _handlers = []
-_werkruimte_ids = []
 
 
 def run(context):
@@ -56,19 +54,6 @@ def run(context):
 
 def stop(context):
     try:
-        for ws_id in _werkruimte_ids:
-            try:
-                werkruimte = _ui.workspaces.itemById(ws_id)
-                paneel = werkruimte.toolbarPanels.itemById(PANEEL_ID) if werkruimte else None
-                if paneel:
-                    knop = paneel.controls.itemById(COMMANDO_ID)
-                    if knop:
-                        knop.deleteMe()
-                    if paneel.controls.count == 0:
-                        paneel.deleteMe()
-            except Exception:
-                pass
-
         try:
             qat = _ui.toolbars.itemById("QAT")
             knop = qat.controls.itemById(COMMANDO_ID) if qat else None
@@ -82,58 +67,28 @@ def stop(context):
             definitie.deleteMe()
 
         _handlers.clear()
-        _werkruimte_ids.clear()
         instellingen.log("Add-in gestopt.")
     except Exception:
         instellingen.log("Stoppen mislukt:\n" + traceback.format_exc())
 
 
 def _plaats_knop(definitie):
-    """Zet de knop waar hij bij het board te zien is.
+    """Zet de knop op de Quick Access Toolbar: het balkje bovenin naast Opslaan.
 
-    Eerst in de werkbalk van de werkruimte van het board. De Electronics-editor
-    is de oude EAGLE-omgeving in Fusion, en niet elke werkruimte daarvan laat
-    zijn werkbalk via de API aanpassen: itemById geeft dan een
-    InternalValidationError. Lukt het nergens, dan komt de knop op de Quick
-    Access Toolbar bovenin, die in elke omgeving zichtbaar is.
+    De Electronics-editor is de oude EAGLE-omgeving in Fusion en laat zijn eigen
+    werkbalk niet via de API aanpassen. workspacesByProductType("BoardProductType")
+    levert bovendien werkruimtes die niets met het board te maken hebben (Explore,
+    Compare, Debug). De QAT is de enige plek die in elke omgeving zichtbaar is,
+    dus daar hoort de knop.
     """
-    gelukt = []
-    for werkruimte in _werkruimtes_voor_board():
-        try:
-            paneel = werkruimte.toolbarPanels.itemById(PANEEL_ID)
-            if paneel is None:
-                paneel = werkruimte.toolbarPanels.add(PANEEL_ID, "MDE")
-            if paneel.controls.itemById(COMMANDO_ID) is None:
-                knop = paneel.controls.addCommand(definitie)
-                knop.isPromoted = True
-                knop.isPromotedByDefault = True
-            _werkruimte_ids.append(werkruimte.id)
-            gelukt.append(f"{werkruimte.id} ({werkruimte.name})")
-        except Exception as ex:
-            instellingen.log(f"Werkbalk van {werkruimte.id} ({werkruimte.name}) niet aanpasbaar: "
-                             f"{type(ex).__name__}: {ex}")
-
-    if gelukt:
-        instellingen.log("Knop in werkruimte(s): " + ", ".join(gelukt))
-        return
-
     qat = _ui.toolbars.itemById("QAT")
     if qat is None:
-        instellingen.log("Geen werkruimte en geen QAT beschikbaar; de knop is nergens geplaatst.")
+        instellingen.log("Geen Quick Access Toolbar gevonden; de knop is nergens geplaatst.")
         return
 
     if qat.controls.itemById(COMMANDO_ID) is None:
         qat.controls.addCommand(definitie)
     instellingen.log("Knop op de Quick Access Toolbar geplaatst.")
-
-
-def _werkruimtes_voor_board():
-    try:
-        lijst = _ui.workspacesByProductType("BoardProductType")
-        return [lijst.item(i) for i in range(lijst.count)]
-    except Exception:
-        instellingen.log("workspacesByProductType mislukt:\n" + traceback.format_exc())
-        return []
 
 
 class _Aangemaakt(adsk.core.CommandCreatedEventHandler):
