@@ -388,6 +388,18 @@ def _naar_klembord(tekst):
         CF_UNICODETEXT = 13
         GMEM_MOVEABLE = 0x0002
 
+        # Zonder deze typen neemt ctypes een 32-bits int aan voor handles en
+        # pointers, en op 64-bits Windows wordt het adres dan afgekapt: een
+        # access violation op adres 0.
+        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+        user32.OpenClipboard.argtypes = [wintypes.HWND]
+        user32.SetClipboardData.restype = wintypes.HANDLE
+        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+
         gegevens = tekst.encode("utf-16-le") + b"\x00\x00"
         if not user32.OpenClipboard(None):
             return False
@@ -395,9 +407,12 @@ def _naar_klembord(tekst):
             user32.EmptyClipboard()
             handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(gegevens))
             adres = kernel32.GlobalLock(handle)
+            if not adres:
+                return False
             ctypes.memmove(adres, gegevens, len(gegevens))
             kernel32.GlobalUnlock(handle)
-            user32.SetClipboardData(CF_UNICODETEXT, handle)
+            if not user32.SetClipboardData(CF_UNICODETEXT, handle):
+                return False
         finally:
             user32.CloseClipboard()
         return True
