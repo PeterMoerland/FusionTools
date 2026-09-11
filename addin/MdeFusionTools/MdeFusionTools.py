@@ -244,7 +244,10 @@ def _toon_palet():
 
     palet = _ui.palettes.itemById(PALET_ID)
     if palet is None:
+        # De ingebouwde browser wil schuine strepen; met backslashes geeft hij
+        # ERR_INVALID_URL.
         html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "pcbuitvoer.html")
+        html = html.replace("\\", "/")
         palet = _ui.palettes.add(PALET_ID, TITEL, html, False, True, True, 420, 300)
         palet.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateFloating
         van_html = _VanHtml()
