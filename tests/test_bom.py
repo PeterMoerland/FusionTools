@@ -82,6 +82,20 @@ class SchrijfTest(unittest.TestCase):
         _, ruw = self._schrijf_en_lees(regels)
         self.assertIn('"10k, 1%"', ruw.splitlines()[1])
 
+    def test_elk_veld_staat_tussen_aanhalingstekens(self):
+        regels = bom.bouw([deel("C4", "100uF", "CAPC3225X135", MPN="885012109004", PACKAGE_SIZE="0402")])
+        _, ruw = self._schrijf_en_lees(regels)
+
+        for regel in ruw.splitlines():
+            # Elke regel begint en eindigt met een aanhalingsteken, en tussen de
+            # velden staat precies "," - dan is elk veld gequote.
+            self.assertTrue(regel.startswith('"') and regel.endswith('"'), regel)
+            self.assertEqual(regel.count('","'), len(bom.KOPREGEL) - 1, regel)
+
+        self.assertIn('"885012109004"', ruw)
+        self.assertIn('"0402"', ruw)
+        self.assertIn('"1"', ruw)  # ook het aantal
+
     def test_micro_teken_overleeft_de_rondgang(self):
         regels = bom.bouw([deel("C1", "2.2µF 100V", "CAPC", MPN="M")])
         rijen, _ = self._schrijf_en_lees(regels)

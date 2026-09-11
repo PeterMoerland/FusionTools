@@ -107,15 +107,16 @@ def natuurlijk(tekst):
 
 
 def schrijf(pad, regels):
-    """Schrijft de regels als CSV volgens RFC 4180.
+    """Schrijft de regels als CSV volgens RFC 4180, elk veld tussen aanhalingstekens.
 
-    Velden met een komma, aanhalingsteken of regelovergang komen tussen dubbele
-    aanhalingstekens; aanhalingstekens in het veld worden verdubbeld. De byte
-    order mark aan het begin zorgt dat Excel het bestand als UTF-8 leest, zodat
-    een micro- of graadteken niet verminkt raakt.
+    Alles quoten, ook wat het niet nodig heeft, zodat een importeur die op de
+    aanhalingstekens let getallen als tekst neemt: een MPN als 885012109004 mag
+    geen 8,85E+11 worden en een behuizing 0402 geen 402. Aanhalingstekens in een
+    veld worden verdubbeld. De byte order mark aan het begin zorgt dat Excel het
+    bestand als UTF-8 leest, zodat een micro- of graadteken niet verminkt raakt.
     """
     with open(pad, "w", newline="", encoding="utf-8-sig") as bestand:
-        schrijver = csv.writer(bestand, quoting=csv.QUOTE_MINIMAL, lineterminator="\r\n")
+        schrijver = csv.writer(bestand, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
         schrijver.writerow(KOPREGEL)
         for r in regels:
             schrijver.writerow(
