@@ -372,11 +372,14 @@ def _voer_uit(board, boardnaam, job, doelmap):
     cpl.schrijf(os.path.join(assembly, f"PnP_{boardnaam}_CPL_back.csv"), plaatsingen, achterkant=True)
 
     # 4. Alles in een zip, met dezelfde naam en indeling als Fusion die zou geven.
+    #    De losse map gaat daarna weg: dezelfde bestanden twee keer is verwarrend,
+    #    en de zip is wat naar de leverancier gaat.
+    gerbers = len([r for r, _ in camjob.bestanden_in(camoutputs) if not r.startswith(camjob.ASSEMBLY)])
     zip_naam = f"{boardnaam}_{datetime.date.today():%Y-%m-%d}.zip"
     aantal = camjob.maak_zip(camoutputs, os.path.join(doelmap, zip_naam))
+    shutil.rmtree(camoutputs, ignore_errors=True)
 
     eigen = sum(1 for o in onderdelen if o.populate and o.is_eigen)
-    gerbers = len([r for r, _ in camjob.bestanden_in(camoutputs) if not r.startswith(camjob.ASSEMBLY)])
     instellingen.log(f"PCB-uitvoer klaar in {doelmap}: {gerbers} Gerber/drill-bestanden (job {os.path.basename(job)}), "
                      f"BOM {len(regels)} regels ({eigen} eigen weggelaten), CPL {len(voor)} voor / {len(achter)} achter, "
                      f"zip {zip_naam} ({aantal} bestanden)")
@@ -513,7 +516,7 @@ def _jobmap(huidig):
 
 def _doelmap(huidig, boardnaam):
     uitvoermap = huidig.get("uitvoermap") or os.path.join(os.path.expanduser("~"), "Downloads")
-    return os.path.join(uitvoermap, boardnaam)
+    return os.path.normpath(os.path.join(uitvoermap, boardnaam))
 
 
 def _bestandsnaam(naam):
