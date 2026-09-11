@@ -61,7 +61,8 @@ class SchrijfTest(unittest.TestCase):
             bom.schrijf(pad, regels)
             with open(pad, encoding="utf-8-sig", newline="") as f:
                 rijen = list(csv.reader(f))
-            ruw = open(pad, encoding="utf-8-sig").read()
+            with open(pad, encoding="utf-8-sig") as f:
+                ruw = f.read()
         return rijen, ruw
 
     def test_komma_en_aanhalingsteken_blijven_in_hun_kolom(self):
