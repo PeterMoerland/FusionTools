@@ -188,12 +188,8 @@ def _voer_uit():
         # en dat is bij een CSV vrijwel altijd Excel met de vorige versie.
         instellingen.log(f"BOM niet geschreven, bestand vergrendeld: {bom_pad}")
         _ui.messageBox(
-            f"De stuklijst kon niet worden geschreven omdat het bestand open staat in een "
-            f"ander programma, waarschijnlijk Excel:
-
-{bom_pad}
-
-"
+            "De stuklijst kon niet worden geschreven omdat het bestand open staat in een "
+            "ander programma, waarschijnlijk Excel:\n\n" + bom_pad + "\n\n"
             "Sluit het daar en klik opnieuw op PCB-uitvoer.",
             TITEL)
         return
