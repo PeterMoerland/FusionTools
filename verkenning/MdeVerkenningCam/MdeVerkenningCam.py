@@ -46,30 +46,47 @@ def run(context):
         # 2. Tekstcommando's die iets zeggen over wat er beschikbaar is. Onbekende
         #    commando's geven een foutmelding terug in plaats van een exception;
         #    die tekst is op zichzelf informatief.
-        proefmap = os.path.join(os.environ.get("LOCALAPPDATA", "."), "MDE", "FusionTools", "mfgexport-proef")
-        os.makedirs(proefmap, exist_ok=True)
-        job = r"Z:\Fusion PCB\CAM processor job files\MDE_2_layer.cam"
-        import time
-        for cmd in ("Electron /?", "Electron.mfgexport /?",
-                    f'Electron.mfgexport "{proefmap}" "{job}"'):
-            log(f"executeTextCommand({cmd!r}):")
+        import shutil, time
+        basis = os.path.join(os.environ.get("LOCALAPPDATA", "."), "MDE", "FusionTools", "mfgexport-proef")
+        shutil.rmtree(basis, ignore_errors=True)
+        os.makedirs(basis, exist_ok=True)
+
+        # De job gekopieerd naar een pad zonder spaties, voor het geval de parser
+        # op spaties splitst en aanhalingstekens niet begrijpt.
+        job_origineel = r"Z:\Fusion PCB\CAM processor job files\MDE_2_layer.cam"
+        job_kort = os.path.join(basis, "MDE_2_layer.cam")
+        shutil.copy2(job_origineel, job_kort)
+
+        varianten = [
+            ("A: geen quotes, job zonder spaties",
+             lambda m: f"Electron.mfgexport {m} {job_kort}"),
+            ("B: geen quotes, schuine strepen",
+             lambda m: f"Electron.mfgexport {m.replace(chr(92), '/')} {job_kort.replace(chr(92), '/')}"),
+            ("C: quotes om beide, job zonder spaties",
+             lambda m: f'Electron.mfgexport "{m}" "{job_kort}"'),
+            ("D: geen quotes om map, quotes om job met spaties",
+             lambda m: f'Electron.mfgexport {m} "{job_origineel}"'),
+        ]
+
+        for letter, (naam, bouw) in zip("ABCD", varianten):
+            uitmap = os.path.join(basis, "uit_" + letter)
+            os.makedirs(uitmap, exist_ok=True)
+            cmd = bouw(uitmap)
+            log(f"{naam}")
+            log(f"  {cmd}")
             begin = time.time()
             try:
                 uit = app.executeTextCommand(cmd)
-                log(f"  (duur {time.time() - begin:.1f} s)")
-                uit = uit if uit is not None else "<None>"
-                for regel in str(uit).splitlines() or ["<leeg>"]:
-                    log("  " + regel)
+                log(f"  -> {uit!r}  (duur {time.time() - begin:.1f} s)")
             except Exception as ex:
-                log(f"  EXCEPTION {type(ex).__name__}: {ex}")
+                log(f"  EXCEPTION {type(ex).__name__}: {ex}  (duur {time.time() - begin:.1f} s)")
+            gevonden = []
+            for wortel, _, bestanden in os.walk(uitmap):
+                for b in bestanden:
+                    pad = os.path.join(wortel, b)
+                    gevonden.append(f"{os.path.relpath(pad, uitmap)} ({os.path.getsize(pad)} b)")
+            log("  inhoud: " + (", ".join(gevonden) if gevonden else "(leeg)"))
             log()
-
-        # 3. Als het tekstcommando geen dialoog opende, dan via de commandodefinitie.
-        log("Inhoud van de proefmap na mfgexport:")
-        for wortel, mappen, bestanden in os.walk(proefmap):
-            for b in bestanden:
-                pad = os.path.join(wortel, b)
-                log(f"  {os.path.relpath(pad, proefmap)}  {os.path.getsize(pad)} bytes")
 
     except Exception:
         log()
