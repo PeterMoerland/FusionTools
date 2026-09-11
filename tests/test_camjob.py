@@ -78,24 +78,14 @@ class UitvoerTest(unittest.TestCase):
             f.write("M48\n")
         return os.path.join(wortel, "MDE_2_layer", "MDE_2_layer.gbr", "CAMOutputs")
 
-    def test_zoekt_camoutputs_en_verzamelt_in_de_boardmap(self):
+    def test_zoekt_camoutputs_waar_mfgexport_hem_neerzet(self):
         with tempfile.TemporaryDirectory() as map_:
             werk = os.path.join(map_, "werk")
             verwacht = self._maak_mfgexport_uitvoer(werk)
             self.assertEqual(camjob.zoek_camoutputs(werk), verwacht)
-
-            boardmap = os.path.join(map_, "Board")
-            oud = os.path.join(boardmap, "CAMOutputs", "GerberFiles")
-            os.makedirs(oud)
-            open(os.path.join(oud, "oud.gbr"), "w").close()
-
-            doel = camjob.verzamel(verwacht, boardmap)
-
-            self.assertEqual(doel, os.path.join(boardmap, "CAMOutputs"))
-            self.assertEqual([r for r, _ in camjob.bestanden_in(doel)],
+            self.assertEqual([r for r, _ in camjob.bestanden_in(verwacht)],
                              [os.path.join("GerberFiles", "copper_top_l1.gbr"),
                               os.path.join("GerberFiles", "drill_1_64.xln")])
-            self.assertIsNone(camjob.zoek_camoutputs(werk))
 
     def test_geen_camoutputs_geeft_none(self):
         with tempfile.TemporaryDirectory() as map_:

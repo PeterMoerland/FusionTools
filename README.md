@@ -32,7 +32,7 @@ Utilities → Add-Ins (Shift+S).
 
 De knop **PCB-uitvoer** staat op het tabblad Manufacturing van de PCB-editor
 (paneel MDE). Hij vraagt welke `.cam`-job je wilt gebruiken (vooraf gekozen op
-het aantal koperlagen) en zet dan `<uitvoermap>\<board>\<board>_<datum>.zip`
+het aantal koperlagen) en zet dan `<uitvoermap>\<board>_<datum>.zip`
 neer, met dezelfde indeling als de zip van Fusions eigen CAM-processor:
 
     CAMOutputs/GerberFiles/...      Gerber en drill, door de CAM-processor van Fusion

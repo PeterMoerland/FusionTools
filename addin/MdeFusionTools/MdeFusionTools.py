@@ -2,9 +2,9 @@
 
 Een knop op het tabblad Manufacturing van de PCB-editor. Die vraagt welke
 CAM-job je wilt gebruiken en zet dan alles voor productie en assemblage in een
-map per board:
+zip in de uitvoermap:
 
-    <uitvoermap>\\<board>\\<board>_<datum>.zip
+    <uitvoermap>\\<board>_<datum>.zip
 
 met daarin, zoals de CAM-processor het ook bundelt:
 
@@ -205,6 +205,10 @@ class _Aangemaakt(adsk.core.CommandCreatedEventHandler):
             opdracht = args.command
             opdracht.okButtonText = "Exporteren"
             opdracht.isRepeatable = False
+            # In de PCB-editor is altijd een EAGLE-commando actief dat het onze
+            # meteen onderbreekt. Standaard voert Fusion het commando dan uit
+            # alsof je op OK drukte; het venster leek daardoor niet te wachten.
+            opdracht.isExecutedWhenPreEmpted = False
 
             huidig = instellingen.laad()
             invoer = opdracht.commandInputs
@@ -221,7 +225,7 @@ class _Aangemaakt(adsk.core.CommandCreatedEventHandler):
             boardnaam = _bestandsnaam(board.name) or "board"
             tekst = invoer.addTextBoxCommandInput(
                 INVOER_UITVOERMAP, "Uitvoer in", _doelmap(huidig, boardnaam), 2, True)
-            tekst.tooltip = "Per board een eigen submap in de uitvoermap."
+            tekst.tooltip = "Hier komt de zip <board>_<datum>.zip."
 
             invoer.addBoolValueInput(INVOER_ANDERE_UITVOERMAP, "Andere uitvoermap...", False, "", False)
 
@@ -269,7 +273,7 @@ class _InvoerGewijzigd(adsk.core.InputChangedEventHandler):
             dialoog = _ui.createFolderDialog()
 
             if invoer.id == INVOER_ANDERE_UITVOERMAP:
-                dialoog.title = "Kies de map voor de PCB-uitvoer (per board komt er een submap)"
+                dialoog.title = "Kies de map waar de zip met de PCB-uitvoer komt"
                 if dialoog.showDialog() != adsk.core.DialogResults.DialogOK:
                     return
                 huidig["uitvoermap"] = dialoog.folder
@@ -514,8 +518,8 @@ def _jobmap(huidig):
 
 
 def _doelmap(huidig, boardnaam):
-    uitvoermap = huidig.get("uitvoermap") or os.path.join(os.path.expanduser("~"), "Downloads")
-    return os.path.normpath(os.path.join(uitvoermap, boardnaam))
+    """De map waar de zip komt: de uitvoermap zelf, standaard Downloads zoals bij Fusion."""
+    return os.path.normpath(huidig.get("uitvoermap") or os.path.join(os.path.expanduser("~"), "Downloads"))
 
 
 def _bestandsnaam(naam):

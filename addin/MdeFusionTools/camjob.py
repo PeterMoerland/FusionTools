@@ -20,7 +20,6 @@ Wat de verkenning daarover leerde (zie README):
 import json
 import os
 import re
-import shutil
 import zipfile
 
 # De secties die mfgexport wel aankan.
@@ -106,19 +105,6 @@ def bestanden_in(map_):
                 grootte = -1
             resultaat.append((os.path.relpath(pad, map_), grootte))
     return sorted(resultaat)
-
-
-def verzamel(camoutputs, doelmap):
-    """Verplaatst de CAMOutputs-map naar doelmap\\CAMOutputs; wat daar al stond gaat weg.
-
-    Geeft het nieuwe pad terug.
-    """
-    doel = os.path.join(doelmap, CAMOUTPUTS)
-    if os.path.isdir(doel):
-        shutil.rmtree(doel)
-    os.makedirs(doelmap, exist_ok=True)
-    shutil.move(camoutputs, doel)
-    return doel
 
 
 def maak_zip(camoutputs, zip_pad):
