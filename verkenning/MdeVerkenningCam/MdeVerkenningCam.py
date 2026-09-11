@@ -46,7 +46,7 @@ def run(context):
         # 2. Tekstcommando's die iets zeggen over wat er beschikbaar is. Onbekende
         #    commando's geven een foutmelding terug in plaats van een exception;
         #    die tekst is op zichzelf informatief.
-        for cmd in ("?", "Electron.?", "Commands.?", "Electron::CAMProcessor ?", "Toolkit.cmdList"):
+        for cmd in ("Electron /?", "NuElectronCommands /?", "PCB /?", "Translator /?", "TranslatorOptions /?", "Commands /?"):
             log(f"executeTextCommand({cmd!r}):")
             try:
                 uit = app.executeTextCommand(cmd)
