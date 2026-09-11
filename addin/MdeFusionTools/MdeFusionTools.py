@@ -348,22 +348,12 @@ def _voer_uit(board, boardnaam, job, doelmap):
     regels = bom.bouw(onderdelen)
     plaatsingen = _plaatsingen(board)
 
-    # 1. Gerber en drill via de CAM-processor zonder venster.
+    # 1. Gerber en drill via de CAM-processor zonder venster, in de werkmap.
     camoutputs, weggelaten = _mfgexport(job)
     if camoutputs is None:
         return
 
-    # 2. De CAMOutputs-map naar de boardmap; wat er van een vorige keer stond gaat weg.
-    try:
-        camoutputs = camjob.verzamel(camoutputs, doelmap)
-    except PermissionError as ex:
-        instellingen.log(f"CAMOutputs niet te vervangen: {ex}")
-        _ui.messageBox("De vorige uitvoer in deze map kon niet worden vervangen; een bestand staat "
-                       "open in een ander programma:\n\n" + str(ex.filename or ex) +
-                       "\n\nSluit het en klik opnieuw op PCB-uitvoer.", TITEL)
-        return
-
-    # 3. Stuklijst en pick-and-place ernaast, in de Assembly-map die de
+    # 2. Stuklijst en pick-and-place ernaast, in de Assembly-map die de
     #    CAM-processor ook zou vullen.
     assembly = os.path.join(camoutputs, camjob.ASSEMBLY)
     os.makedirs(assembly, exist_ok=True)
@@ -374,13 +364,19 @@ def _voer_uit(board, boardnaam, job, doelmap):
     cpl.schrijf(os.path.join(assembly, f"PnP_{boardnaam}_CPL_front.csv"), plaatsingen, achterkant=False)
     cpl.schrijf(os.path.join(assembly, f"PnP_{boardnaam}_CPL_back.csv"), plaatsingen, achterkant=True)
 
-    # 4. Alles in een zip, met dezelfde naam en indeling als Fusion die zou geven.
-    #    De losse map gaat daarna weg: dezelfde bestanden twee keer is verwarrend,
-    #    en de zip is wat naar de leverancier gaat.
+    # 3. Alles in een zip in de uitvoermap, met dezelfde naam en indeling als
+    #    Fusion die zou geven. Alleen de zip komt daar; de losse bestanden
+    #    blijven in de werkmap tot de volgende export.
     gerbers = len([r for r, _ in camjob.bestanden_in(camoutputs) if not r.startswith(camjob.ASSEMBLY)])
     zip_naam = f"{boardnaam}_{datetime.date.today():%Y-%m-%d}.zip"
-    aantal = camjob.maak_zip(camoutputs, os.path.join(doelmap, zip_naam))
-    shutil.rmtree(camoutputs, ignore_errors=True)
+    try:
+        aantal = camjob.maak_zip(camoutputs, os.path.join(doelmap, zip_naam))
+    except PermissionError as ex:
+        instellingen.log(f"Zip niet te schrijven: {ex}")
+        _ui.messageBox("De zip kon niet worden geschreven; hij staat open in een ander programma:\n\n"
+                       + os.path.join(doelmap, zip_naam) + "\n\nSluit hem en klik opnieuw op PCB-uitvoer.",
+                       TITEL)
+        return
 
     eigen = sum(1 for o in onderdelen if o.populate and o.is_eigen)
     instellingen.log(f"PCB-uitvoer klaar in {doelmap}: {gerbers} Gerber/drill-bestanden (job {os.path.basename(job)}), "
