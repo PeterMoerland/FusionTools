@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# Lokale instellingen met paden en eventuele inloggegevens
+*.local.json
+
+# Rapporten en uitvoer van proefdraaien
+uitvoer/
+*.log

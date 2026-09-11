@@ -1,0 +1,13 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "script",
+    "id": "9c1f4b6e-2d7a-4e3b-9a58-6f0c2b1d8e41",
+    "author": "MDE Automation B.V.",
+    "description": {
+        "": "Verkent wat de Electronics-API van een open board prijsgeeft en schrijft dat naar een rapport."
+    },
+    "version": "0.1.0",
+    "runOnStartup": false,
+    "supportedOS": "windows",
+    "editEnabled": true
+}
