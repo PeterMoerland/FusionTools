@@ -75,7 +75,7 @@ class SchrijfTest(unittest.TestCase):
         self.assertEqual(len(rijen[1]), len(bom.KOPREGEL))
         kolom = dict(zip(bom.KOPREGEL, rijen[1]))
         self.assertEqual(kolom["DESCRIPTION"], omschrijving)
-        self.assertEqual(kolom["Aantal"], "1")
+        self.assertEqual(kolom["QTY"], "1")
 
     def test_ruwe_regel_is_gequote_waar_nodig(self):
         regels = bom.bouw([deel("R1", "10k, 1%", "RESC", MPN="M")])
@@ -99,7 +99,7 @@ class SchrijfTest(unittest.TestCase):
     def test_micro_teken_overleeft_de_rondgang(self):
         regels = bom.bouw([deel("C1", "2.2µF 100V", "CAPC", MPN="M")])
         rijen, _ = self._schrijf_en_lees(regels)
-        self.assertEqual(dict(zip(bom.KOPREGEL, rijen[1]))["Waarde"], "2.2µF 100V")
+        self.assertEqual(dict(zip(bom.KOPREGEL, rijen[1]))["Value"], "2.2µF 100V")
 
 
 if __name__ == "__main__":

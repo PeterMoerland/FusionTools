@@ -18,11 +18,9 @@ KOLOM_ATTRIBUTEN = (
     "MANUFACTURER",
     "DESCRIPTION",
     "PACKAGE_SIZE",
-    "MOUSER_PART_NUMBER",
-    "DATASHEET",
 )
 
-KOPREGEL = ("Aantal", "Referenties", "Waarde", "Footprint") + KOLOM_ATTRIBUTEN
+KOPREGEL = ("QTY", "Reference Designator", "Value", "Footprint") + KOLOM_ATTRIBUTEN
 
 # Elementen van deze fabrikant zijn geen in te kopen onderdelen: montagegaten,
 # labels, soldeerpads uit de eigen bibliotheek. Die horen niet op de stuklijst.

@@ -55,8 +55,8 @@ Wat daarover is vastgesteld (Fusion 2705.1.15):
 - De CPL heeft precies het formaat van Fusion: `Name,X,Y,Angle,Value,Package`,
   millimeters met twee decimalen (interne eenheid 1/320000 mm), een bestand per
   zijde (`PnP_<board>_CPL_front.csv` en `_back.csv`), gewone tekstsortering.
-- De BOM is algemeen: `Aantal, Referenties, Waarde, Footprint, MPN, MANUFACTURER,
-  DESCRIPTION, PACKAGE_SIZE, MOUSER_PART_NUMBER, DATASHEET`, elk veld tussen
+- De BOM is algemeen: `QTY, Reference Designator, Value, Footprint, MPN,
+  MANUFACTURER, DESCRIPTION, PACKAGE_SIZE`, elk veld tussen
   aanhalingstekens. Onderdelen met fabrikant `MDE` (soldeerpads, montagegaten)
   blijven eruit; niet-geplaatste ook.
 
