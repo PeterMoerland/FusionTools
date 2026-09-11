@@ -102,8 +102,22 @@
     }
   };
 
-  // Zodra de pagina er is, om de stand vragen; Python antwoordt met 'stand'.
-  window.addEventListener("load", function () { stuur("klaar"); });
+  // Fusion spuit het adsk-object pas na het laden van de pagina in, soms
+  // seconden later. Wachten tot het er is en dan pas om de stand vragen;
+  // Python antwoordt met 'stand'.
+  var pogingen = 0;
+  function meldKlaar() {
+    if (window.adsk && typeof adsk.fusionSendData === "function") {
+      stuur("klaar");
+      return;
+    }
+    pogingen += 1;
+    if (pogingen % 25 === 0) {
+      document.getElementById("info").textContent = "Wachten op Fusion… (" + (pogingen / 5) + " s)";
+    }
+    setTimeout(meldKlaar, 200);
+  }
+  window.addEventListener("load", meldKlaar);
 </script>
 </body>
 </html>
