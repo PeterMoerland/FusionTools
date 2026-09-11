@@ -1,0 +1,13 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "script",
+    "id": "3e8d2a71-5b4c-4f19-8c6d-0a9e7f1b2c53",
+    "author": "MDE Automation B.V.",
+    "description": {
+        "": "Probeert de CAM-export van Fusion Electronics vanuit de API te starten en legt vast wat er gebeurt."
+    },
+    "version": "0.1.0",
+    "runOnStartup": false,
+    "supportedOS": "windows",
+    "editEnabled": true
+}
