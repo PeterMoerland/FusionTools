@@ -304,9 +304,30 @@ class _Uitvoeren(adsk.core.CommandEventHandler):
             huidig["laatste_job"] = job
             instellingen.bewaar(huidig)
 
-            _voer_uit(self._board, self._boardnaam, job, _doelmap(huidig, self._boardnaam))
+            # Niet hier exporteren (reentrancy), maar zodra dit commando klaar is.
+            _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps({
+                "boardnaam": self._boardnaam,
+                "job": job,
+                "doelmap": _doelmap(huidig, self._boardnaam)}))
         except Exception:
             instellingen.log("Uitvoeren mislukt:\n" + traceback.format_exc())
+            _ui.messageBox("Er ging iets mis:\n\n" + traceback.format_exc()
+                           + "\n\nDetails staan in " + instellingen.LOG, TITEL)
+
+
+class _Starten(adsk.core.CustomEventHandler):
+    """Draait op de hoofddraad nadat het venster dicht is; hier mag mfgexport wel."""
+
+    def notify(self, args):
+        try:
+            keuzes = json.loads(args.additionalInfo or "{}")
+            board = adsk.electron.Board.cast(_app.activeProduct)
+            if board is None:
+                _ui.messageBox("Het board is niet meer actief; open het en probeer opnieuw.", TITEL)
+                return
+            _voer_uit(board, keuzes["boardnaam"], keuzes["job"], keuzes["doelmap"])
+        except Exception:
+            instellingen.log("Export mislukt:\n" + traceback.format_exc())
             _ui.messageBox("Er ging iets mis:\n\n" + traceback.format_exc()
                            + "\n\nDetails staan in " + instellingen.LOG, TITEL)
 
