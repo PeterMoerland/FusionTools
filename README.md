@@ -69,7 +69,7 @@ mfgexport met "Execute failed due to reentrancy".
 
 Instellingen staan in `%APPDATA%\MDE\FusionTools\instellingen.json`
 (`uitvoermap`, `jobmap`, `laatste_job`); het logboek in
-`%LOCALAPPDATA%\MDE\FusionToolsusiontools.log`. De standaard jobmap is
+`%LOCALAPPDATA%\MDE\FusionTools\fusiontools.log`. De standaard jobmap is
 `Z:\Fusion PCB\CAM processor job files`.
 
 ## Installeren
