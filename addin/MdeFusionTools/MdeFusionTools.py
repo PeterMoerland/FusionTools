@@ -1,6 +1,6 @@
 """MDE FusionTools: PCB-uitvoer in een handeling.
 
-Een knop op de Quick Access Toolbar die de stuklijst van het open board als correcte
+Een knop op de werkbalk van de PCB-editor die de stuklijst van het open board als correcte
 CSV wegschrijft en daarna de CAM-export van Fusion opent voor Gerber, drill en
 pick-and-place. De CAM-processor deed dat laatste al goed; alleen de BOM eruit
 was onbruikbaar door ontbrekende aanhalingstekens.
@@ -17,6 +17,7 @@ from . import bom
 from . import instellingen
 
 COMMANDO_ID = "MDE_PcbUitvoer"
+PANEEL_ID = "MDE_Paneel"
 TITEL = "MDE PCB-uitvoer"
 
 _app = None
@@ -54,13 +55,19 @@ def run(context):
 
 def stop(context):
     try:
-        try:
-            qat = _ui.toolbars.itemById("QAT")
-            knop = qat.controls.itemById(COMMANDO_ID) if qat else None
-            if knop:
-                knop.deleteMe()
-        except Exception:
-            pass
+        for ws_id, tab_id in _geplaatst:
+            try:
+                tab = _ui.workspaces.itemById(ws_id).toolbarTabs.itemById(tab_id)
+                paneel = tab.toolbarPanels.itemById(PANEEL_ID) if tab else None
+                if paneel:
+                    knop = paneel.controls.itemById(COMMANDO_ID)
+                    if knop:
+                        knop.deleteMe()
+                    if paneel.controls.count == 0:
+                        paneel.deleteMe()
+            except Exception:
+                pass
+        _geplaatst.clear()
 
         definitie = _ui.commandDefinitions.itemById(COMMANDO_ID)
         if definitie:
@@ -72,23 +79,65 @@ def stop(context):
         instellingen.log("Stoppen mislukt:\n" + traceback.format_exc())
 
 
-def _plaats_knop(definitie):
-    """Zet de knop op de Quick Access Toolbar: het balkje bovenin naast Opslaan.
+# De PCB-editor van Fusion. Het id met de spelfout is van Autodesk; daarom eerst
+# opzoeken op producttype en pas dan terugvallen op de letterlijke naam.
+PCB_PRODUCTTYPE = "ElectronPcbDocProductType"
+PCB_WERKRUIMTE_ID = "BoardLayoutEnvironement"
 
-    De Electronics-editor is de oude EAGLE-omgeving in Fusion en laat zijn eigen
-    werkbalk niet via de API aanpassen. workspacesByProductType("BoardProductType")
-    levert bovendien werkruimtes die niets met het board te maken hebben (Explore,
-    Compare, Debug). De QAT is de enige plek die in elke omgeving zichtbaar is,
-    dus daar hoort de knop.
+# De tabbladen waar de knop komt: waar je ontwerpt, en waar de CAM-uitvoer zit.
+PCB_TABBLADEN = ("EaglePcbDesign", "EaglePcbManufacturing")
+
+_geplaatst = []   # (werkruimte-id, tab-id) van elk paneel dat we hebben gemaakt
+
+
+def _plaats_knop(definitie):
+    """Zet de knop in een eigen paneel MDE op de werkbalk van de PCB-editor.
+
+    De werkbalk van deze werkruimte is niet via workspace.toolbarPanels te
+    bereiken (dat geeft een InternalValidationError), wel via de tabbladen:
+    toolbarTabs -> toolbarPanels. Zo staat het ook in de nieuwere API-voorbeelden
+    van Autodesk.
     """
-    qat = _ui.toolbars.itemById("QAT")
-    if qat is None:
-        instellingen.log("Geen Quick Access Toolbar gevonden; de knop is nergens geplaatst.")
+    werkruimte = _pcb_werkruimte()
+    if werkruimte is None:
+        instellingen.log("PCB-werkruimte niet gevonden; de knop is nergens geplaatst.")
         return
 
-    if qat.controls.itemById(COMMANDO_ID) is None:
-        qat.controls.addCommand(definitie)
-    instellingen.log("Knop op de Quick Access Toolbar geplaatst.")
+    for tab_id in PCB_TABBLADEN:
+        try:
+            tab = werkruimte.toolbarTabs.itemById(tab_id)
+            if tab is None:
+                instellingen.log(f"Tabblad {tab_id} niet gevonden in {werkruimte.id}.")
+                continue
+
+            paneel = tab.toolbarPanels.itemById(PANEEL_ID)
+            if paneel is None:
+                paneel = tab.toolbarPanels.add(PANEEL_ID, "MDE")
+
+            if paneel.controls.itemById(COMMANDO_ID) is None:
+                knop = paneel.controls.addCommand(definitie)
+                knop.isPromoted = True
+                knop.isPromotedByDefault = True
+
+            _geplaatst.append((werkruimte.id, tab_id))
+            instellingen.log(f"Knop geplaatst: {werkruimte.id} / {tab_id} ({tab.name}).")
+        except Exception as ex:
+            instellingen.log(f"Plaatsen op {tab_id} mislukt: {type(ex).__name__}: {ex}")
+
+
+def _pcb_werkruimte():
+    try:
+        lijst = _ui.workspacesByProductType(PCB_PRODUCTTYPE)
+        for i in range(lijst.count):
+            ws = lijst.item(i)
+            if ws.id == PCB_WERKRUIMTE_ID or "Board" in ws.id:
+                return ws
+        if lijst.count > 0:
+            return lijst.item(0)
+    except Exception as ex:
+        instellingen.log(f"workspacesByProductType mislukt: {type(ex).__name__}: {ex}")
+
+    return _ui.workspaces.itemById(PCB_WERKRUIMTE_ID)
 
 
 class _Aangemaakt(adsk.core.CommandCreatedEventHandler):
