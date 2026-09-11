@@ -48,45 +48,51 @@ def run(context):
         #    die tekst is op zichzelf informatief.
         import shutil, time
         basis = os.path.join(os.environ.get("LOCALAPPDATA", "."), "MDE", "FusionTools", "mfgexport-proef")
-        shutil.rmtree(basis, ignore_errors=True)
-        os.makedirs(basis, exist_ok=True)
+        jobmap = os.path.join(basis, "jobs")
+        uitmap = os.path.join(basis, "uit")
+        markering = os.path.join(basis, "gestart.txt")
 
-        # De job gekopieerd naar een pad zonder spaties, voor het geval de parser
-        # op spaties splitst en aanhalingstekens niet begrijpt.
-        job_origineel = r"Z:\Fusion PCB\CAM processor job files\MDE_2_layer.cam"
-        job_kort = os.path.join(basis, "MDE_2_layer.cam")
-        shutil.copy2(job_origineel, job_kort)
+        def boom(wortelmap):
+            regels = []
+            for wortel, _, bestanden in os.walk(wortelmap):
+                for b in bestanden:
+                    pad = os.path.join(wortel, b)
+                    st = os.stat(pad)
+                    regels.append(f"  {time.strftime('%H:%M:%S', time.localtime(st.st_mtime))}  "
+                                  f"{st.st_size:>8} b  {os.path.relpath(pad, wortelmap)}")
+            return regels or ["  (leeg)"]
 
-        varianten = [
-            ("A: geen quotes, job zonder spaties",
-             lambda m: f"Electron.mfgexport {m} {job_kort}"),
-            ("B: geen quotes, schuine strepen",
-             lambda m: f"Electron.mfgexport {m.replace(chr(92), '/')} {job_kort.replace(chr(92), '/')}"),
-            ("C: quotes om beide, job zonder spaties",
-             lambda m: f'Electron.mfgexport "{m}" "{job_kort}"'),
-            ("D: geen quotes om map, quotes om job met spaties",
-             lambda m: f'Electron.mfgexport {m} "{job_origineel}"'),
-        ]
+        if not os.path.exists(markering):
+            # Stap 1: schoon beginnen en een enkele export starten. De job staat op
+            # een pad zonder spaties, de uitvoermap is een andere map dan die van de
+            # job, zodat te zien is welke van de twee het commando gebruikt.
+            shutil.rmtree(basis, ignore_errors=True)
+            os.makedirs(jobmap)
+            os.makedirs(uitmap)
+            job = os.path.join(jobmap, "MDE_2_layer.cam")
+            shutil.copy2(r"Z:\Fusion PCB\CAM processor job files\MDE_2_layer.cam", job)
 
-        for letter, (naam, bouw) in zip("ABCD", varianten):
-            uitmap = os.path.join(basis, "uit_" + letter)
-            os.makedirs(uitmap, exist_ok=True)
-            cmd = bouw(uitmap)
-            log(f"{naam}")
-            log(f"  {cmd}")
+            cmd = f"Electron.mfgexport {uitmap} {job}"
+            log("STAP 1: export gestart")
+            log("  " + cmd)
             begin = time.time()
             try:
                 uit = app.executeTextCommand(cmd)
                 log(f"  -> {uit!r}  (duur {time.time() - begin:.1f} s)")
             except Exception as ex:
-                log(f"  EXCEPTION {type(ex).__name__}: {ex}  (duur {time.time() - begin:.1f} s)")
-            gevonden = []
-            for wortel, _, bestanden in os.walk(uitmap):
-                for b in bestanden:
-                    pad = os.path.join(wortel, b)
-                    gevonden.append(f"{os.path.relpath(pad, uitmap)} ({os.path.getsize(pad)} b)")
-            log("  inhoud: " + (", ".join(gevonden) if gevonden else "(leeg)"))
-            log()
+                log(f"  EXCEPTION {type(ex).__name__}: {ex}")
+            with open(markering, "w") as f:
+                f.write(time.strftime("%H:%M:%S"))
+            log("  Draai dit script over een halve minuut nog eens voor stap 2.")
+        else:
+            with open(markering) as f:
+                log(f"STAP 2: export gestart om {f.read()}, nu {time.strftime('%H:%M:%S')}")
+            log("Inhoud van de hele proefmap (tijd, grootte, pad):")
+            regels = boom(basis)
+            for r in regels:
+                log(r)
+            os.remove(markering)
+            log("(markering verwijderd; een volgende run begint weer bij stap 1)")
 
     except Exception:
         log()
