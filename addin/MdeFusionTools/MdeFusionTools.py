@@ -15,6 +15,7 @@ levert alleen Gerber en drill; de rest maakt de add-in daarom zelf.
 """
 
 import datetime
+import json
 import os
 import re
 import shutil
@@ -39,6 +40,12 @@ INVOER_ANDERE_UITVOERMAP = "andere_uitvoermap"
 INVOER_ANDERE_JOBMAP = "andere_jobmap"
 
 STANDAARD_JOBMAP = r"Z:\Fusion PCB\CAM processor job files"
+
+# De export start een ander commando (mfgexport). Dat mag niet zolang ons eigen
+# commando nog bezig is ("Execute failed due to reentrancy"). De execute-handler
+# geeft daarom alleen de keuzes door via deze gebeurtenis; de handler daarvan
+# draait op de hoofddraad zodra het venster gesloten is.
+GEBEURTENIS_ID = "MDE_PcbUitvoerStarten"
 
 # mfgexport geeft meteen antwoord en schrijft de bestanden er vlak achteraan.
 # Zo lang wachten we hoogstens, met tussenpozen waarin Fusion zijn werk kan doen.
@@ -71,6 +78,15 @@ def run(context):
         definitie.commandCreated.add(aangemaakt)
         _handlers.append(aangemaakt)
 
+        try:
+            _app.unregisterCustomEvent(GEBEURTENIS_ID)
+        except Exception:
+            pass
+        gebeurtenis = _app.registerCustomEvent(GEBEURTENIS_ID)
+        starten = _Starten()
+        gebeurtenis.add(starten)
+        _handlers.append(starten)
+
         _plaats_knop(definitie)
     except Exception:
         instellingen.log("Starten mislukt:\n" + traceback.format_exc())
@@ -97,6 +113,11 @@ def stop(context):
         definitie = _ui.commandDefinitions.itemById(COMMANDO_ID)
         if definitie:
             definitie.deleteMe()
+
+        try:
+            _app.unregisterCustomEvent(GEBEURTENIS_ID)
+        except Exception:
+            pass
 
         _handlers.clear()
         instellingen.log("Add-in gestopt.")
