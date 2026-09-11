@@ -272,10 +272,19 @@ def _maak_palet():
     return palet
 
 
-def _verberg_palet():
+def _sluit_palet():
+    """Het palet weggooien, niet verbergen.
+
+    Een verborgen palet haalt Fusion na een commando (zoals mfgexport) weer
+    tevoorschijn, en dan nog leeg ook. Weggooien is afdoende; de volgende klik
+    maakt het opnieuw aan.
+    """
     palet = _ui.palettes.itemById(PALET_ID)
     if palet is not None:
-        palet.isVisible = False
+        try:
+            palet.deleteMe()
+        except Exception:
+            instellingen.log("Palet sluiten mislukt:\n" + traceback.format_exc())
 
 
 def _stand():
@@ -345,6 +354,7 @@ class _VanHtml(adsk.core.HTMLEventHandler):
 
             elif actie == "annuleren":
                 palet.isVisible = False
+                _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps({"alleen_sluiten": True}))
 
             args.returnData = "OK"
         except Exception:
@@ -358,9 +368,13 @@ class _Starten(adsk.core.CustomEventHandler):
 
     def notify(self, args):
         try:
-            # Hier sluiten, niet in de HTML-gebeurtenis: daar negeert Fusion het.
-            _verberg_palet()
+            # Hier sluiten, niet in de HTML-gebeurtenis: daar negeert Fusion het,
+            # en een palet dat zichzelf vanuit zijn eigen bericht weggooit is vragen
+            # om problemen.
+            _sluit_palet()
             keuzes = json.loads(args.additionalInfo or "{}")
+            if keuzes.get("alleen_sluiten"):
+                return
             board = adsk.electron.Board.cast(_app.activeProduct)
             if board is None:
                 _ui.messageBox("Het board is niet meer actief; open het en probeer opnieuw.", TITEL)
@@ -370,6 +384,9 @@ class _Starten(adsk.core.CustomEventHandler):
             instellingen.log("Export mislukt:\n" + traceback.format_exc())
             _ui.messageBox("Er ging iets mis:\n\n" + traceback.format_exc()
                            + "\n\nDetails staan in " + instellingen.LOG, TITEL)
+        finally:
+            # Voor het geval Fusion het na het CAM-commando toch weer toonde.
+            _sluit_palet()
 
 
 # ---------------------------------------------------------------------------
