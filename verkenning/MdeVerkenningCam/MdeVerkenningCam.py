@@ -46,7 +46,7 @@ def run(context):
         # 2. Tekstcommando's die iets zeggen over wat er beschikbaar is. Onbekende
         #    commando's geven een foutmelding terug in plaats van een exception;
         #    die tekst is op zichzelf informatief.
-        for cmd in ("Commands.List", "Electron.List", "Commands.Start Electron::CAMExport"):
+        for cmd in ("?", "Electron.?", "Commands.?", "Electron::CAMProcessor ?", "Toolkit.cmdList"):
             log(f"executeTextCommand({cmd!r}):")
             try:
                 uit = app.executeTextCommand(cmd)
@@ -60,14 +60,7 @@ def run(context):
             log()
 
         # 3. Als het tekstcommando geen dialoog opende, dan via de commandodefinitie.
-        d = defs.itemById("Electron::CAMExport")
-        log(f"itemById('Electron::CAMExport'): {'gevonden' if d else 'niet gevonden'}")
-        if d:
-            try:
-                ok = d.execute()
-                log(f"  execute() -> {ok}")
-            except Exception as ex:
-                log(f"  execute() EXCEPTION {type(ex).__name__}: {ex}")
+        log("(CAMExport niet opnieuw gestart; dat is al aangetoond)")
 
     except Exception:
         log()

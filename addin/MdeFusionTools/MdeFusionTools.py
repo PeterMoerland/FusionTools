@@ -198,18 +198,73 @@ def _voer_uit():
     instellingen.log(f"BOM geschreven: {bom_pad} ({len(regels)} regels uit {len(onderdelen)} elementen, "
                      f"{eigen} eigen onderdelen weggelaten)")
 
+    # De map die het CAM-venster als uitvoer moet krijgen, staat op het klembord:
+    # de add-in kan die niet in het venster zetten, maar plakken is een handeling.
+    # Zo komt Fusions CAMOutputs-map naast de stuklijst terecht.
+    klembord = _naar_klembord(doelmap)
+
+    # Welke CAM-job past bij dit board, zodat de gebruiker niet hoeft te tellen.
+    lagen = _koperlagen(board)
+
     # De CAM-export van Fusion zelf voor Gerber, drill en pick-and-place. Die
     # onthoudt de laatst gebruikte job; de gebruiker hoeft alleen op Process te
     # drukken en de map te kiezen.
     cam_gestart = _start_cam()
 
+    stappen = []
+    if cam_gestart:
+        stappen.append("De CAM-export staat open.")
+    else:
+        stappen.append("De CAM-export kon niet automatisch geopend worden; start hem via Manufacturing.")
+    if lagen:
+        stappen.append(f"Dit board heeft {lagen} koperlagen; gebruik de job MDE_{lagen}_layer.cam.")
+    stappen.append(f"Kies als uitvoermap:\n{doelmap}"
+                   + ("\n(staat op het klembord, dus plakken volstaat)" if klembord else ""))
+
     _ui.messageBox(
         f"Stuklijst geschreven:\n{bom_pad}\n\n"
         f"{len(regels)} regels; {eigen} eigen onderdelen (fabrikant {bom.EIGEN_FABRIKANT}) weggelaten.\n\n"
-        + ("De CAM-export staat open voor Gerber en pick-and-place."
-           if cam_gestart else
-           "De CAM-export kon niet automatisch geopend worden; start hem via Manufacturing."),
+        + "\n\n".join(stappen),
         TITEL)
+
+
+def _koperlagen(board):
+    """Aantal gebruikte koperlagen; in EAGLE zijn dat de lagen 1 tot en met 16."""
+    try:
+        lagen = board.layers
+        return sum(1 for i in range(lagen.count)
+                   if 1 <= lagen.item(i).number <= 16 and lagen.item(i).used)
+    except Exception:
+        return 0
+
+
+def _naar_klembord(tekst):
+    """Zet tekst op het Windows-klembord. Geeft terug of dat gelukt is."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        CF_UNICODETEXT = 13
+        GMEM_MOVEABLE = 0x0002
+
+        gegevens = tekst.encode("utf-16-le") + b"\x00\x00"
+        if not user32.OpenClipboard(None):
+            return False
+        try:
+            user32.EmptyClipboard()
+            handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(gegevens))
+            adres = kernel32.GlobalLock(handle)
+            ctypes.memmove(adres, gegevens, len(gegevens))
+            kernel32.GlobalUnlock(handle)
+            user32.SetClipboardData(CF_UNICODETEXT, handle)
+        finally:
+            user32.CloseClipboard()
+        return True
+    except Exception as ex:
+        instellingen.log(f"Klembord niet gezet: {type(ex).__name__}: {ex}")
+        return False
 
 
 def _onderdelen(board):
