@@ -47,20 +47,7 @@ def run(context):
         definitie.commandCreated.add(aangemaakt)
         _handlers.append(aangemaakt)
 
-        # De knop hoort in de werkruimte van het board. Die is per producttype op te
-        # vragen; de id vastzetten zou breken als Autodesk hem hernoemt.
-        for werkruimte in _werkruimtes_voor_board():
-            paneel = werkruimte.toolbarPanels.itemById(PANEEL_ID)
-            if paneel is None:
-                paneel = werkruimte.toolbarPanels.add(PANEEL_ID, "MDE")
-            if paneel.controls.itemById(COMMANDO_ID) is None:
-                knop = paneel.controls.addCommand(definitie)
-                knop.isPromoted = True
-                knop.isPromotedByDefault = True
-            _werkruimte_ids.append(werkruimte.id)
-
-        instellingen.log("Add-in gestart; knop in werkruimtes: "
-                         + (", ".join(_werkruimte_ids) or "geen"))
+        _plaats_knop(definitie)
     except Exception:
         instellingen.log("Starten mislukt:\n" + traceback.format_exc())
         if _ui:
@@ -70,17 +57,25 @@ def run(context):
 def stop(context):
     try:
         for ws_id in _werkruimte_ids:
-            werkruimte = _ui.workspaces.itemById(ws_id)
-            if werkruimte is None:
-                continue
-            paneel = werkruimte.toolbarPanels.itemById(PANEEL_ID)
-            if paneel is None:
-                continue
-            knop = paneel.controls.itemById(COMMANDO_ID)
+            try:
+                werkruimte = _ui.workspaces.itemById(ws_id)
+                paneel = werkruimte.toolbarPanels.itemById(PANEEL_ID) if werkruimte else None
+                if paneel:
+                    knop = paneel.controls.itemById(COMMANDO_ID)
+                    if knop:
+                        knop.deleteMe()
+                    if paneel.controls.count == 0:
+                        paneel.deleteMe()
+            except Exception:
+                pass
+
+        try:
+            qat = _ui.toolbars.itemById("QAT")
+            knop = qat.controls.itemById(COMMANDO_ID) if qat else None
             if knop:
                 knop.deleteMe()
-            if paneel.controls.count == 0:
-                paneel.deleteMe()
+        except Exception:
+            pass
 
         definitie = _ui.commandDefinitions.itemById(COMMANDO_ID)
         if definitie:
@@ -91,6 +86,45 @@ def stop(context):
         instellingen.log("Add-in gestopt.")
     except Exception:
         instellingen.log("Stoppen mislukt:\n" + traceback.format_exc())
+
+
+def _plaats_knop(definitie):
+    """Zet de knop waar hij bij het board te zien is.
+
+    Eerst in de werkbalk van de werkruimte van het board. De Electronics-editor
+    is de oude EAGLE-omgeving in Fusion, en niet elke werkruimte daarvan laat
+    zijn werkbalk via de API aanpassen: itemById geeft dan een
+    InternalValidationError. Lukt het nergens, dan komt de knop op de Quick
+    Access Toolbar bovenin, die in elke omgeving zichtbaar is.
+    """
+    gelukt = []
+    for werkruimte in _werkruimtes_voor_board():
+        try:
+            paneel = werkruimte.toolbarPanels.itemById(PANEEL_ID)
+            if paneel is None:
+                paneel = werkruimte.toolbarPanels.add(PANEEL_ID, "MDE")
+            if paneel.controls.itemById(COMMANDO_ID) is None:
+                knop = paneel.controls.addCommand(definitie)
+                knop.isPromoted = True
+                knop.isPromotedByDefault = True
+            _werkruimte_ids.append(werkruimte.id)
+            gelukt.append(f"{werkruimte.id} ({werkruimte.name})")
+        except Exception as ex:
+            instellingen.log(f"Werkbalk van {werkruimte.id} ({werkruimte.name}) niet aanpasbaar: "
+                             f"{type(ex).__name__}: {ex}")
+
+    if gelukt:
+        instellingen.log("Knop in werkruimte(s): " + ", ".join(gelukt))
+        return
+
+    qat = _ui.toolbars.itemById("QAT")
+    if qat is None:
+        instellingen.log("Geen werkruimte en geen QAT beschikbaar; de knop is nergens geplaatst.")
+        return
+
+    if qat.controls.itemById(COMMANDO_ID) is None:
+        qat.controls.addCommand(definitie)
+    instellingen.log("Knop op de Quick Access Toolbar geplaatst.")
 
 
 def _werkruimtes_voor_board():
