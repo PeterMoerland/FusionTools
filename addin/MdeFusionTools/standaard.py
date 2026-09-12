@@ -370,7 +370,12 @@ def script_regels(toewijzingen, bladen=None):
     bladen = bladen or {}
     per_blad = {}
     for naam, gpn in geldig:
-        per_blad.setdefault(bladen.get(naam), []).append(f"ATTRIBUTE {naam} GPN '{gpn}';")
+        # Twee commando's per onderdeel: de waarde zetten, en de weergave uit.
+        # Een nieuw attribuut toont EAGLE anders standaard in het schema.
+        per_blad.setdefault(bladen.get(naam), []).extend([
+            f"ATTRIBUTE {naam} GPN '{gpn}';",
+            f"ATTRIBUTE {naam} GPN OFF;",
+        ])
 
     # Bestaat het attribuut al met een andere waarde, dan vraagt EAGLE per
     # onderdeel om bevestiging ("already exists, overwrite?"). In een script

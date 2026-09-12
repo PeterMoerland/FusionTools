@@ -204,7 +204,8 @@ class ScriptTest(unittest.TestCase):
     def test_attribute_regels(self):
         regels = standaard.script_regels([("R9", "GPR0402103"), ("C7", "GPC0402104"), ("", "X"), ("R1", "")])
         self.assertEqual(regels, ["SET CONFIRM YES;",
-                                  "ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE C7 GPN 'GPC0402104';",
+                                  "ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE R9 GPN OFF;",
+                                  "ATTRIBUTE C7 GPN 'GPC0402104';", "ATTRIBUTE C7 GPN OFF;",
                                   "SET CONFIRM OFF;"])
         self.assertEqual(standaard.script_regels([("", "X")]), [])
 
@@ -214,12 +215,12 @@ class ScriptTest(unittest.TestCase):
             bladen={"R9": 2, "C7": 1, "R1": 2})
         self.assertEqual(regels, [
             "SET CONFIRM YES;",
-            "ATTRIBUTE X1 GPN 'GPX';",
+            "ATTRIBUTE X1 GPN 'GPX';", "ATTRIBUTE X1 GPN OFF;",
             "EDIT .S1;",
-            "ATTRIBUTE C7 GPN 'GPC0402104';",
+            "ATTRIBUTE C7 GPN 'GPC0402104';", "ATTRIBUTE C7 GPN OFF;",
             "EDIT .S2;",
-            "ATTRIBUTE R9 GPN 'GPR0402103';",
-            "ATTRIBUTE R1 GPN 'GPR0402232';",
+            "ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE R9 GPN OFF;",
+            "ATTRIBUTE R1 GPN 'GPR0402232';", "ATTRIBUTE R1 GPN OFF;",
             "EDIT .S1;",
             "SET CONFIRM OFF;",
         ])
@@ -227,7 +228,7 @@ class ScriptTest(unittest.TestCase):
     def test_een_blad_geen_terugkeer_nodig(self):
         regels = standaard.script_regels([("R9", "GPR0402103")], bladen={"R9": 3})
         self.assertEqual(regels, ["SET CONFIRM YES;", "EDIT .S3;", "ATTRIBUTE R9 GPN 'GPR0402103';",
-                                  "SET CONFIRM OFF;"])
+                                  "ATTRIBUTE R9 GPN OFF;", "SET CONFIRM OFF;"])
 
 
 if __name__ == "__main__":
