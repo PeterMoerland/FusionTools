@@ -506,13 +506,31 @@ def _argument(pad):
     return f'"{pad}"' if " " in pad else pad
 
 
+# Namen van koperlagen zoals EAGLE en Fusion ze geven: Top, Bottom, Route2..15,
+# en de nieuwere stackup-namen. De nummering is niet meer de EAGLE-reeks 1..16:
+# in de CAM-jobs van Fusion is de onderkant bijvoorbeeld laag 304 en de tweede
+# binnenlaag 303. Daarom telt de naam mee en niet alleen het nummer.
+KOPERLAAG_NAAM = re.compile(r"^(top|bottom|route\s?\d+|inner\s?\d*|signal\s?\d*|l\d+)$", re.IGNORECASE)
+
+
 def _koperlagen(board):
-    """Aantal gebruikte koperlagen; in EAGLE zijn dat de lagen 1 tot en met 16."""
+    """Aantal gebruikte koperlagen: laag 1..16 uit de EAGLE-reeks, of een laag met een kopernaam."""
     try:
         lagen = board.layers
-        return sum(1 for i in range(lagen.count)
-                   if 1 <= lagen.item(i).number <= 16 and lagen.item(i).used)
+        koper = []
+        gebruikt = []
+        for i in range(lagen.count):
+            laag = lagen.item(i)
+            if not laag.used:
+                continue
+            naam = laag.name or ""
+            gebruikt.append(f"{laag.number}:{naam}")
+            if 1 <= laag.number <= 16 or KOPERLAAG_NAAM.match(naam.strip()):
+                koper.append(f"{laag.number}:{naam}")
+        instellingen.log(f"Koperlagen ({len(koper)}): {', '.join(koper)} | gebruikte lagen: {', '.join(gebruikt)}")
+        return len(koper)
     except Exception:
+        instellingen.log("Koperlagen tellen mislukt:\n" + traceback.format_exc())
         return 0
 
 
