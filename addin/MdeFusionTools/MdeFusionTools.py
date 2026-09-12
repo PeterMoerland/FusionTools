@@ -221,13 +221,16 @@ def _plaats_in(werkruimte, tab, definities):
 # De schema-editor: daar hoort de knop Standaardcomponenten ook, op DESIGN.
 # ---------------------------------------------------------------------------
 
-# De werkruimte van het schema is, net als die van het board, alleen via het
-# producttype te vinden; welke naam Autodesk eraan gaf is niet gedocumenteerd.
-# Daarom twee wegen: bij het starten deze kandidaten proberen, en verder
-# meeluisteren wanneer een werkruimte actief wordt en dan op naam herkennen.
-SCHEMA_PRODUCTTYPES = ("ElectronSchematicDocProductType", "ElectronSchDocProductType",
-                       "SchematicDocProductType")
-SCHEMA_KENMERK = re.compile(r"schem", re.IGNORECASE)
+# De werkruimte van het schema, gevonden via het producttype (de spelfout in
+# het id is weer van Autodesk): SchEditorEnvironement, "Schematic Editor", met
+# de tabbladen EagleSchDesign, EagleSchDocument, EagleSchValidate,
+# EagleSchLibrary en ToolsTab. Andere producttypes leverden werkruimtes op die
+# er niets mee te maken hebben (Explore, Debug, Compare); die vallen weg op het
+# kenmerk in de naam. Wordt de werkruimte pas later geladen, dan plaatst
+# workspaceActivated de knop alsnog.
+SCHEMA_PRODUCTTYPES = ("ElectronSchDocProductType",)
+SCHEMA_WERKRUIMTE_ID = "SchEditorEnvironement"
+SCHEMA_KENMERK = re.compile(r"schematic|SchEditor|EagleSch", re.IGNORECASE)
 
 _schema_definities = []   # wat er in de schema-editor komt (nu alleen Standaardcomponenten)
 

@@ -95,12 +95,33 @@ class _Uitvoeren(adsk.core.CommandEventHandler):
 
 
 def _actief_ontwerp():
-    """Het open board of schema, of None. In beide staan de R en C met hun attributen."""
+    """Het open board of schema, of None. In beide staan de R en C met hun attributen.
+
+    Eerst het producttype bekijken en dan pas casten: een Schematic naar Board
+    casten (of omgekeerd) is niet veilig gebleken.
+    """
     product = _app.activeProduct
-    ontwerp = adsk.electron.Board.cast(product)
-    if ontwerp is None:
-        ontwerp = adsk.electron.Schematic.cast(product)
-    return ontwerp
+    if product is None:
+        return None
+    try:
+        producttype = product.productType or ""
+    except Exception:
+        producttype = ""
+    instellingen.log(f"Standaardcomponenten: actief product {producttype!r}")
+
+    laag = producttype.lower()
+    if "sch" in laag:
+        return adsk.electron.Schematic.cast(product)
+    if "board" in laag or "pcb" in laag:
+        return adsk.electron.Board.cast(product)
+    return None
+
+
+def _is_schema(ontwerp):
+    try:
+        return "sch" in (ontwerp.productType or "").lower()
+    except Exception:
+        return False
 
 
 def _toon_palet():
@@ -134,8 +155,8 @@ def _sluit_palet():
 
 
 def _onderdelen():
-    if adsk.electron.Schematic.cast(_board) is not None:
-        return _onderdelen_schema(adsk.electron.Schematic.cast(_board))
+    if _is_schema(_board):
+        return _onderdelen_schema(_board)
 
     resultaat = []
     for o in _lees_onderdelen(_board):
@@ -151,37 +172,47 @@ def _onderdelen():
 
 
 def _onderdelen_schema(schema):
-    """De parts van het schema. De footprint komt van het device; de attributen
-    zijn dezelfde als op het board (MPN, GPN, PACKAGE_SIZE)."""
+    """De parts van het schema, met dezelfde attributen als op het board (MPN,
+    GPN, PACKAGE_SIZE).
+
+    De footprint wordt hier niet gelezen: daarvoor zou part.device.package nodig
+    zijn, en dat is de meest waarschijnlijke oorzaak van een crash van Fusion bij
+    de eerste poging. De soort volgt uit de naam (R.., C..) en de maat uit
+    PACKAGE_SIZE; alleen een part zonder dat attribuut valt daardoor onder
+    "maat niet te bepalen". Elke stap wordt gelogd om een crash te kunnen plaatsen.
+    """
     resultaat = []
     parts = schema.parts
-    for i in range(parts.count):
+    aantal = parts.count
+    instellingen.log(f"Schema: {aantal} parts lezen.")
+    for i in range(aantal):
         part = parts.item(i)
+        naam = ""
+        try:
+            naam = part.name or ""
+            waarde = part.value or ""
+        except Exception:
+            instellingen.log(f"Part {i} niet leesbaar:\n" + traceback.format_exc())
+            continue
 
         attributen = {}
         try:
-            for j in range(part.attributes.count):
-                a = part.attributes.item(j)
+            lijst = part.attributes
+            for j in range(lijst.count):
+                a = lijst.item(j)
                 attributen[a.name] = a.value
         except Exception:
-            instellingen.log(f"Attributen van {part.name} niet leesbaar:\n" + traceback.format_exc())
-
-        footprint = ""
-        try:
-            device = part.device
-            if device is not None and device.package is not None:
-                footprint = device.package.name or ""
-        except Exception:
-            pass
+            instellingen.log(f"Attributen van {naam} niet leesbaar:\n" + traceback.format_exc())
 
         resultaat.append(standaard.Onderdeel(
-            naam=part.name,
-            waarde=part.value or attributen.get("VALUE", "") or "",
-            footprint=footprint,
+            naam=naam,
+            waarde=waarde or attributen.get("VALUE", "") or "",
+            footprint="",
             mpn=attributen.get("MPN", "") or "",
             gpn=attributen.get("GPN", "") or "",
             package_size=attributen.get("PACKAGE_SIZE", "") or "",
             populate=True))
+    instellingen.log(f"Schema: {len(resultaat)} parts gelezen.")
     return resultaat
 
 
