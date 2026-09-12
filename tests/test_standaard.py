@@ -120,6 +120,52 @@ class KandidatenTest(unittest.TestCase):
         self.assertEqual(lijst[0].opmerkingen, [])
 
 
+class TabelFormatenTest(unittest.TestCase):
+    """De schrijfwijzen zoals api/componenten ze werkelijk levert."""
+
+    def test_vermogen_in_milliwatt_past_bij_breuk_op_het_board(self):
+        tabel = [comp("GPR0402103", "R", "0402", 10000, "10 k", tolerantie="1", vermogen="62.5mW", spanning="50V"),
+                 comp("GPR0603103", "R", "0603", 10000, "10 k", tolerantie="1", vermogen="100mW", spanning="75V")]
+        k = standaard.ontleed_waarde("R", "10k 1/16W 1%")
+        lijst = standaard.kandidaten("R", "0402", k, tabel)
+        self.assertEqual(lijst[0].opmerkingen, [])
+        self.assertEqual(lijst[0].score, 4)
+
+        k = standaard.ontleed_waarde("R", "10k 1/4W")
+        lijst = standaard.kandidaten("R", "0402", k, tabel)
+        self.assertEqual(lijst[0].opmerkingen, ["vermogen 62.5mW lager dan 0.25W"])
+
+    def test_vermogen_op_het_board_in_milliwatt_of_met_spatie(self):
+        self.assertAlmostEqual(standaard.ontleed_waarde("R", "10k 62.5mW").vermogen, 0.0625)
+        self.assertAlmostEqual(standaard.ontleed_waarde("R", "10k 0.1W").vermogen, 0.1)
+        self.assertAlmostEqual(standaard._watt("1/10 W"), 0.1)
+        self.assertAlmostEqual(standaard._watt("100 mW"), 0.1)
+        self.assertIsNone(standaard._watt(None))
+
+    def test_dielectricum_als_lijst_en_np0_is_c0g(self):
+        tabel = [comp("GPC0402220", "C", "0402", 22e-12, "22 pF", tolerantie="5", spanning="50V", dielectricum="C0G, NP0"),
+                 comp("GPC0402220X", "C", "0402", 22e-12, "22 pF", tolerantie="10", spanning="50V", dielectricum="X7R")]
+        k = standaard.ontleed_waarde("C", "22pF 50V NP0 5%")
+        lijst = standaard.kandidaten("C", "0402", k, tabel)
+        self.assertEqual(lijst[0].gpn, "GPC0402220")
+        self.assertEqual(lijst[0].opmerkingen, [])
+        self.assertIn("dielectricum X7R i.p.v. C0G", lijst[1].opmerkingen)
+
+    def test_absolute_tolerantie_in_pf_geeft_geen_opmerking(self):
+        tabel = [comp("GPC04020R5", "C", "0402", 5e-13, "0,5 pF", tolerantie="±0.1pF", spanning="50V",
+                      dielectricum="C0G, NP0")]
+        k = standaard.ontleed_waarde("C", "0.5pF 50V C0G 10%")
+        lijst = standaard.kandidaten("C", "0402", k, tabel)
+        self.assertEqual(lijst[0].opmerkingen, [])
+
+    def test_spanning_met_komma_of_spatie(self):
+        tabel = [comp("GPC0805107", "C", "0805", 1e-4, "100 uF", tolerantie="20", spanning="6,3V", dielectricum="X5R"),
+                 comp("GPC0805107B", "C", "0805", 1e-4, "100 uF", tolerantie="20", spanning="6.3 V", dielectricum="X5R")]
+        k = standaard.ontleed_waarde("C", "100uF 6.3v X5R")
+        lijst = standaard.kandidaten("C", "0805", k, tabel)
+        self.assertEqual([c.opmerkingen for c in lijst], [[], []])
+
+
 class ControleerTest(unittest.TestCase):
 
     def _onderdelen(self):

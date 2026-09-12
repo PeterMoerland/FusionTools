@@ -139,11 +139,8 @@ def ontleed_waarde(soort, tekst):
             k.spanning = _getal(re.sub(r"[vV].*$", "", t).strip())
         elif t.upper() in DIELECTRICA:
             k.dielectricum = t.upper().replace("NP0", "C0G")
-        elif re.match(r"^\d+/\d+\s*[wW]$", t):
-            teller, noemer = t.rstrip("wW").split("/")
-            k.vermogen = float(teller) / float(noemer)
-        elif re.match(r"^\d*[.,]?\d+\s*[wW]$", t):
-            k.vermogen = _getal(t.rstrip("wW"))
+        elif _watt(t) is not None:
+            k.vermogen = _watt(t)
     return k
 
 
@@ -202,17 +199,33 @@ def _volt(tekst):
 
 
 def _procent(tekst):
-    m = re.match(r"^\s*(\d+(?:[.,]\d+)?)", str(tekst or ""))
+    """Tolerantie in procent; None als er niets staat."""
+    m = re.match(r"^\s*[±+/-]*\s*(\d+(?:[.,]\d+)?)\s*%?\s*$", str(tekst or ""))
     return _getal(m.group(1)) if m else None
 
 
+def _absolute_tolerantie(tekst):
+    """Kleine condensatoren hebben een tolerantie in picofarad (±0.25pF) in
+    plaats van procenten; die is niet met een percentage te vergelijken."""
+    return bool(re.search(r"[pnu]F\s*$", str(tekst or ""), re.IGNORECASE))
+
+
 def _watt(tekst):
-    t = str(tekst or "").strip().rstrip("wW").strip()
-    if re.match(r"^\d+/\d+$", t):
-        a, b = t.split("/")
-        return float(a) / float(b)
-    m = re.match(r"^\d*[.,]?\d+$", t)
-    return _getal(t) if m else None
+    """Vermogen in watt uit 1/16W, 0.25W, 62.5mW, 100 mW; None als onleesbaar."""
+    t = str(tekst or "").strip()
+    m = re.match(r"^(\d+)\s*/\s*(\d+)\s*[wW]?$", t)
+    if m:
+        return float(m.group(1)) / float(m.group(2))
+    m = re.match(r"^(\d*[.,]?\d+)\s*(m?)[wW]$", t)
+    if m:
+        return _getal(m.group(1)) * (1e-3 if m.group(2) else 1.0)
+    return None
+
+
+def _dielectrica(tekst):
+    """De dielectrica uit de tabel als verzameling: "C0G, NP0" en "C0G/NP0" zijn beide {C0G}."""
+    delen = re.split(r"[,/;\s]+", str(tekst or "").upper())
+    return {d.replace("NP0", "C0G") for d in delen if d}
 
 
 def kandidaten(soort, grootte, kenmerken, componenten):
@@ -246,14 +259,14 @@ def kandidaten(soort, grootte, kenmerken, componenten):
                 opmerkingen.append(f"spanning {c.get('spanning')} lager dan {_kort(kenmerken.spanning)}V")
 
         if kenmerken.dielectricum is not None:
-            d = str(c.get("dielectricum") or "").upper().replace("NP0", "C0G")
-            if d == kenmerken.dielectricum:
+            d = _dielectrica(c.get("dielectricum"))
+            if kenmerken.dielectricum in d:
                 score += 2
             elif d:
                 score -= 1
-                opmerkingen.append(f"dielectricum {d} i.p.v. {kenmerken.dielectricum}")
+                opmerkingen.append(f"dielectricum {c.get('dielectricum')} i.p.v. {kenmerken.dielectricum}")
 
-        if kenmerken.tolerantie is not None:
+        if kenmerken.tolerantie is not None and not _absolute_tolerantie(c.get("tolerantie")):
             t = _procent(c.get("tolerantie"))
             if t is None:
                 opmerkingen.append("tolerantie onbekend")
