@@ -1,9 +1,9 @@
 """De knop Standaardcomponenten: R en C van het board vergelijken met de
-standaardcomponenten van Eurocircuits en het attribuut MPN bijwerken.
+standaardcomponenten van Eurocircuits en het attribuut GPN bijwerken.
 
 Een palet (resources/standaard.html) toont per weerstand en condensator de
-huidige MPN en het voorgestelde GPN; aangevinkte regels worden met een
-EAGLE-script (ATTRIBUTE <naam> MPN '<gpn>') bijgewerkt, want de API laat
+huidige MPN en GPN en het voorgestelde GPN; aangevinkte regels worden met een
+EAGLE-script (ATTRIBUTE <naam> GPN '<gpn>') bijgewerkt, want de API laat
 attributen alleen lezen. Zie standaard.py voor het vergelijken zelf en
 componenten.py voor het ophalen van de tabel.
 """
@@ -43,7 +43,7 @@ def start(app, ui, handlers, lees_onderdelen):
             COMMANDO_ID,
             "Standaardcomponenten",
             "Controleert alle weerstanden en condensatoren tegen de standaardcomponenten van "
-            "Eurocircuits en zet het GPN in het attribuut MPN.",
+            "Eurocircuits en zet het GPN in het attribuut GPN. MPN blijft ongewijzigd.",
             iconen)
     else:
         definitie.resourceFolder = iconen
@@ -132,6 +132,7 @@ def _onderdelen():
             waarde=o.waarde,
             footprint=o.footprint,
             mpn=o.attributen.get("MPN", "") or "",
+            gpn=o.attributen.get("GPN", "") or "",
             package_size=o.attributen.get("PACKAGE_SIZE", "") or "",
             populate=o.populate))
     return resultaat
@@ -167,6 +168,7 @@ def _stand(melding="", fout=False):
         "waarde": u.waarde,
         "grootte": u.grootte,
         "mpn": u.mpn,
+        "gpn": u.gpn,
         "status": u.status,
         "toelichting": u.toelichting,
         "kandidaten": [{"gpn": k.gpn, "omschrijving": k.omschrijving or k.waarde_tekst,
@@ -225,7 +227,7 @@ class _VanHtml(adsk.core.HTMLEventHandler):
 
 
 class _Toepassen(adsk.core.CustomEventHandler):
-    """Zet de gekozen GPN's in MPN met een EAGLE-script en ververst het palet."""
+    """Zet de gekozen GPN's in het attribuut GPN met een EAGLE-script en ververst het palet."""
 
     def notify(self, args):
         try:
@@ -249,15 +251,15 @@ class _Toepassen(adsk.core.CustomEventHandler):
                 return
 
             antwoord = _voer_script_uit(regels)
-            instellingen.log(f"MPN bijgewerkt voor {len(regels)} onderdelen; antwoord: {antwoord!r}")
+            instellingen.log(f"GPN bijgewerkt voor {len(regels)} onderdelen; antwoord: {antwoord!r}")
 
             # Opnieuw controleren: wat net een voorstel was, is nu standaard.
             if palet:
-                _stuur_stand(palet, f"MPN bijgewerkt voor {len(regels)} onderdelen. "
+                _stuur_stand(palet, f"GPN bijgewerkt voor {len(regels)} onderdelen. "
                                     "Sla het board op om het te bewaren.")
         except Exception:
-            instellingen.log("MPN bijwerken mislukt:\n" + traceback.format_exc())
-            _ui.messageBox("MPN bijwerken mislukt:\n\n" + traceback.format_exc()
+            instellingen.log("GPN bijwerken mislukt:\n" + traceback.format_exc())
+            _ui.messageBox("GPN bijwerken mislukt:\n\n" + traceback.format_exc()
                            + "\n\nDetails staan in " + instellingen.LOG, TITEL)
 
 
@@ -265,7 +267,7 @@ def _voer_script_uit(regels):
     """Schrijft de ATTRIBUTE-regels naar een .scr en laat de PCB-editor hem draaien."""
     map_ = os.path.join(os.path.dirname(instellingen.LOG), "scripts")
     os.makedirs(map_, exist_ok=True)
-    pad = os.path.join(map_, "mpn.scr")
+    pad = os.path.join(map_, "gpn.scr")
     with open(pad, "w", encoding="utf-8", newline="\n") as bestand:
         bestand.write("\n".join(regels) + "\n")
 

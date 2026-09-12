@@ -55,7 +55,7 @@ Wat daarover is vastgesteld (Fusion 2705.1.15):
 - De CPL heeft precies het formaat van Fusion: `Name,X,Y,Angle,Value,Package`,
   millimeters met twee decimalen (interne eenheid 1/320000 mm), een bestand per
   zijde (`PnP_<board>_CPL_front.csv` en `_back.csv`), gewone tekstsortering.
-- De BOM is algemeen: `QTY, Reference Designator, Value, Footprint, MPN,
+- De BOM is algemeen: `QTY, Reference Designator, Value, Footprint, MPN, GPN,
   MANUFACTURER, DESCRIPTION, PACKAGE_SIZE`, elk veld tussen
   aanhalingstekens. Onderdelen met fabrikant `MDE` (soldeerpads, montagegaten)
   blijven eruit; niet-geplaatste ook.
@@ -80,12 +80,15 @@ en de behuizingsmaat (attribuut `PACKAGE_SIZE`, anders uit de footprintnaam:
 `RESC1005X40` is 0402) en zoekt de standaardcomponenten met dezelfde soort,
 maat en waarde. Spanning, dielectricum, tolerantie en vermogen bepalen de
 volgorde; een lagere spanning of ruimere tolerantie dan gevraagd staat erbij
-als opmerking. Staat het GPN al in `MPN`, dan is het onderdeel al standaard.
+als opmerking. Staat het GPN al in het attribuut `GPN`, dan is het onderdeel al
+standaard.
 
-Aangevinkte regels krijgen met **MPN bijwerken** het gekozen GPN in het
-attribuut `MPN`. De API laat attributen alleen lezen; het schrijven gaat met een
-EAGLE-script (`ATTRIBUTE R9 MPN 'GPR0402103';`) via `Electron.runScript`.
-Daarna moet het board nog opgeslagen worden.
+Aangevinkte regels krijgen met **GPN bijwerken** het gekozen GPN in het
+attribuut `GPN`; `MPN` blijft het fabrikantnummer, zodat andere leveranciers
+er niets van merken. De API laat attributen alleen lezen; het schrijven gaat
+met een EAGLE-script (`ATTRIBUTE R9 GPN 'GPR0402103';`) via
+`Electron.runScript`. Daarna moet het board nog opgeslagen worden. De BOM heeft
+een kolom `GPN` naast `MPN`.
 
 Instellingen staan in `%APPDATA%\MDE\FusionTools\instellingen.json`
 (`uitvoermap`, `jobmap`, `laatste_job`, `componenten_sleutel`, optioneel

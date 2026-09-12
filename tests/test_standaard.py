@@ -172,7 +172,7 @@ class ControleerTest(unittest.TestCase):
         O = standaard.Onderdeel
         return [
             O("C7", "100nF 16V", "CAPC1005X60", mpn="CL05B104KO5NNNC", package_size="0402"),
-            O("C1", "2.2nF 25V X7R 10%", "CAPC1005X60", mpn="GPC0402222"),
+            O("C1", "2.2nF 25V X7R 10%", "CAPC1005X60", mpn="CL05B222KB5NNNC", gpn="GPC0402222"),
             O("C4", "100uF 6.3v X7R", "CAPC3225X135", mpn="885012109004", package_size="1210"),
             O("R9", "10k", "RESC1005X40", mpn=""),
             O("R12", "4k7 1/4w", "RESC1005X40", mpn="RC0402FR-074K7L"),
@@ -203,7 +203,7 @@ class ScriptTest(unittest.TestCase):
 
     def test_attribute_regels(self):
         regels = standaard.script_regels([("R9", "GPR0402103"), ("C7", "GPC0402104"), ("", "X"), ("R1", "")])
-        self.assertEqual(regels, ["ATTRIBUTE R9 MPN 'GPR0402103';", "ATTRIBUTE C7 MPN 'GPC0402104';"])
+        self.assertEqual(regels, ["ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE C7 GPN 'GPC0402104';"])
 
 
 if __name__ == "__main__":

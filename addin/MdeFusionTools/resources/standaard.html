@@ -40,7 +40,8 @@
           <th class="klein">Naam</th>
           <th>Waarde</th>
           <th class="klein">Maat</th>
-          <th>Huidige MPN</th>
+          <th>MPN</th>
+          <th>Huidige GPN</th>
           <th>Standaardcomponent</th>
         </tr>
       </thead>
@@ -54,7 +55,7 @@
       <button type="button" onclick="stuur('sleutel')" title="De gedeelde sleutel voor de MDE-app invoeren">Sleutel…</button>
       <button type="button" onclick="stuur('vernieuwen')">Opnieuw controleren</button>
       <button type="button" onclick="stuur('sluiten')">Sluiten</button>
-      <button type="button" class="primair" id="toepassen" onclick="toepassen()" disabled>MPN bijwerken</button>
+      <button type="button" class="primair" id="toepassen" onclick="toepassen()" disabled>GPN bijwerken</button>
     </div>
   </div>
 
@@ -98,7 +99,7 @@
     var n = document.querySelectorAll("tr[data-naam] input[type=checkbox]:checked").length;
     var knop = document.getElementById("toepassen");
     knop.disabled = n === 0;
-    knop.textContent = n ? "MPN bijwerken (" + n + ")" : "MPN bijwerken";
+    knop.textContent = n ? "GPN bijwerken (" + n + ")" : "GPN bijwerken";
   }
 
   function toon(nieuw) {
@@ -124,7 +125,8 @@
       cel = document.createElement("td"); cel.className = "klein"; cel.textContent = u.naam; rij.appendChild(cel);
       cel = document.createElement("td"); cel.textContent = u.waarde; rij.appendChild(cel);
       cel = document.createElement("td"); cel.className = "klein"; cel.textContent = u.grootte || "?"; rij.appendChild(cel);
-      cel = document.createElement("td"); cel.className = "huidig"; cel.textContent = u.mpn || "(leeg)"; rij.appendChild(cel);
+      cel = document.createElement("td"); cel.className = "huidig"; cel.textContent = u.mpn || ""; rij.appendChild(cel);
+      cel = document.createElement("td"); cel.className = "huidig"; cel.textContent = u.gpn || "(leeg)"; rij.appendChild(cel);
 
       cel = document.createElement("td");
       if (u.status === "voorstel") {
@@ -137,7 +139,7 @@
           optie.selected = i === 0;
           lijst.appendChild(optie);
         });
-        lijst.title = "Kies welk standaardcomponent in MPN komt";
+        lijst.title = "Kies welk standaardcomponent in het attribuut GPN komt";
         cel.appendChild(lijst);
         if (u.toelichting) {
           var opm = document.createElement("div"); opm.className = "opm"; opm.textContent = u.toelichting;

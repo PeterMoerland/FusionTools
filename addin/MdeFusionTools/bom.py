@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 # leverancier wordt omgezet, en daar heb je aan prijzen en categorieen niets.
 KOLOM_ATTRIBUTEN = (
     "MPN",
+    "GPN",
     "MANUFACTURER",
     "DESCRIPTION",
     "PACKAGE_SIZE",
