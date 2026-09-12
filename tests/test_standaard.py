@@ -208,6 +208,27 @@ class ScriptTest(unittest.TestCase):
                                   "SET CONFIRM OFF;"])
         self.assertEqual(standaard.script_regels([("", "X")]), [])
 
+    def test_wisselt_per_blad_en_eindigt_op_het_laagste(self):
+        regels = standaard.script_regels(
+            [("R9", "GPR0402103"), ("C7", "GPC0402104"), ("R1", "GPR0402232"), ("X1", "GPX")],
+            bladen={"R9": 2, "C7": 1, "R1": 2})
+        self.assertEqual(regels, [
+            "SET CONFIRM YES;",
+            "ATTRIBUTE X1 GPN 'GPX';",
+            "EDIT .S1;",
+            "ATTRIBUTE C7 GPN 'GPC0402104';",
+            "EDIT .S2;",
+            "ATTRIBUTE R9 GPN 'GPR0402103';",
+            "ATTRIBUTE R1 GPN 'GPR0402232';",
+            "EDIT .S1;",
+            "SET CONFIRM OFF;",
+        ])
+
+    def test_een_blad_geen_terugkeer_nodig(self):
+        regels = standaard.script_regels([("R9", "GPR0402103")], bladen={"R9": 3})
+        self.assertEqual(regels, ["SET CONFIRM YES;", "EDIT .S3;", "ATTRIBUTE R9 GPN 'GPR0402103';",
+                                  "SET CONFIRM OFF;"])
+
 
 if __name__ == "__main__":
     unittest.main()

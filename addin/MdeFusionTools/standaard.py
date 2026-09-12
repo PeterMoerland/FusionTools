@@ -352,21 +352,36 @@ def _natuurlijk(tekst):
     return [int(d) if d.isdigit() else d.upper() for d in re.split(r"(\d+)", tekst)]
 
 
-def script_regels(toewijzingen):
+def script_regels(toewijzingen, bladen=None):
     """EAGLE-scriptregels die het attribuut GPN zetten: [(naam, gpn), ...].
 
     Attributen zijn via de API alleen te lezen; schrijven gaat met het
     EAGLE-commando ATTRIBUTE, uitgevoerd als script (Electron.runScript).
+
+    In het schema bereikt ATTRIBUTE alleen onderdelen op het actieve blad. Met
+    bladen (naam -> bladnummer) wisselt het script per groep van blad met
+    EDIT .S<n> en eindigt het op het laagste blad dat het aanraakte. Onderdelen
+    zonder bekend blad komen als eerste, op het blad dat open staat.
     """
-    regels = []
-    for naam, gpn in toewijzingen:
-        if not naam or not gpn:
-            continue
-        veilig = str(gpn).replace("'", "")
-        regels.append(f"ATTRIBUTE {naam} GPN '{veilig}';")
-    if not regels:
+    geldig = [(naam, str(gpn).replace("'", "")) for naam, gpn in toewijzingen if naam and gpn]
+    if not geldig:
         return []
+
+    bladen = bladen or {}
+    per_blad = {}
+    for naam, gpn in geldig:
+        per_blad.setdefault(bladen.get(naam), []).append(f"ATTRIBUTE {naam} GPN '{gpn}';")
+
     # Bestaat het attribuut al met een andere waarde, dan vraagt EAGLE per
     # onderdeel om bevestiging ("already exists, overwrite?"). In een script
     # beantwoordt SET CONFIRM YES die vraag; daarna weer uit.
-    return ["SET CONFIRM YES;"] + regels + ["SET CONFIRM OFF;"]
+    regels = ["SET CONFIRM YES;"]
+    regels += per_blad.pop(None, [])
+    genummerd = sorted(per_blad)
+    for blad in genummerd:
+        regels.append(f"EDIT .S{blad};")
+        regels += per_blad[blad]
+    if len(genummerd) > 1:
+        regels.append(f"EDIT .S{genummerd[0]};")
+    regels.append("SET CONFIRM OFF;")
+    return regels

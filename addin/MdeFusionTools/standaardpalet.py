@@ -29,6 +29,7 @@ _ui = None
 _handlers = None
 _lees_onderdelen = None   # functie(board) -> onderdelen met naam, waarde, footprint, populate, attributen
 _board = None
+_bladen = {}              # in het schema: partnaam -> bladnummer, voor EDIT .S<n> in het script
 
 
 def start(app, ui, handlers, lees_onderdelen):
@@ -192,6 +193,22 @@ def _onderdelen_schema(schema):
     except Exception:
         instellingen.log("Gekoppeld board niet leesbaar:\n" + traceback.format_exc())
 
+    # Op welk blad elk part staat: ATTRIBUTE werkt alleen op het actieve blad,
+    # dus het script moet per blad wisselen.
+    global _bladen
+    _bladen = {}
+    try:
+        bladen = schema.sheets
+        for i in range(bladen.count):
+            blad = bladen.item(i)
+            nummer = blad.number
+            delen = blad.parts
+            for j in range(delen.count):
+                _bladen.setdefault(delen.item(j).name, nummer)
+        instellingen.log(f"Schema: {bladen.count} bladen, {len(_bladen)} parts met een blad.")
+    except Exception:
+        instellingen.log("Bladen van het schema niet leesbaar:\n" + traceback.format_exc())
+
     resultaat = []
     parts = schema.parts
     aantal = parts.count
@@ -334,7 +351,7 @@ class _Toepassen(adsk.core.CustomEventHandler):
 
             palet = _ui.palettes.itemById(PALET_ID)
             keuzes = [(k.get("naam", ""), k.get("gpn", "")) for k in gegevens.get("keuzes", [])]
-            regels = standaard.script_regels(keuzes)
+            regels = standaard.script_regels(keuzes, _bladen if _is_schema(_board) else None)
             if not regels:
                 if palet:
                     palet.sendInfoToHTML("melding", "Niets om bij te werken.")
