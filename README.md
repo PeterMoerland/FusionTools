@@ -79,12 +79,14 @@ Een uitgave klaarzetten op de share (draait eerst de tests):
     .\publish.ps1
 
 Dat maakt `\\172.16.1.4\data\Fusion PCB\Apps\MdeFusionTools\<datum-tijd>\`
-met de add-in, `install.ps1` en `Installeer.cmd`, en ververst `huidig\` naar
-die laatste uitgave. Een andere plek: `-Doel <pad>`.
+met de add-in, `install.ps1` en `Installeer.cmd`, en ververst `laatste\` naar
+die laatste uitgave. Een andere plek: `-Doel <pad>`. (De map heet niet `huidig`
+zoals bij de Inventor-tools: die naam is op de NAS blijven hangen als een
+onzichtbare map die "al bestaat" maar niet te openen of te verwijderen is.)
 
 Collega's dubbelklikken op
 
-    \\172.16.1.4\data\Fusion PCB\Apps\MdeFusionTools\huidig\Installeer.cmd
+    \\172.16.1.4\data\Fusion PCB\Apps\MdeFusionTools\laatste\Installeer.cmd
 
 en starten Fusion (opnieuw). Dat kopieert de add-in naar
 `%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\MdeFusionTools\`; Fusion

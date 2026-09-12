@@ -10,7 +10,7 @@
 
     De map heet naar de datum en het tijdstip, zodat een oude uitgave blijft
     staan en je kunt terugvallen als er iets niet blijkt te werken. Daarnaast
-    wijst 'huidig' altijd naar de laatste.
+    wijst 'laatste' altijd naar de laatste uitgave.
 
 .EXAMPLE
     .\publish.ps1
@@ -21,6 +21,11 @@
 #>
 param(
     [string]$Doel = '\\172.16.1.4\data\Fusion PCB\Apps\MdeFusionTools',
+
+    # De vaste map die altijd naar de laatste uitgave wijst. Niet 'huidig' zoals
+    # bij de Inventor-tools: die naam is op de NAS blijven hangen als een
+    # onzichtbare, ontoegankelijke map die "al bestaat" en niet weg te krijgen is.
+    [string]$VasteMap = 'laatste',
 
     [switch]$SkipTests
 )
@@ -85,7 +90,7 @@ Copy-Item -Path (Join-Path $projectRoot 'Installeer.cmd') -Destination $uitgave 
 # De map zelf blijft staan en alleen de inhoud wordt vervangen. Een map op de
 # share verwijderen en meteen opnieuw aanmaken liet op de NAS een map achter die
 # voor niemand meer toegankelijk was ("Toegang geweigerd", ook voor rd).
-$huidig = Join-Path $Doel 'huidig'
+$huidig = Join-Path $Doel $VasteMap
 try {
     if (Test-Path $huidig) {
         Get-ChildItem $huidig -Force | Remove-Item -Recurse -Force
@@ -95,7 +100,7 @@ try {
     Copy-Item -Path (Join-Path $uitgave '*') -Destination $huidig -Recurse -Force
 } catch {
     Write-Host ""
-    Write-Host "De uitgave staat klaar in $uitgave, maar 'huidig' kon niet worden bijgewerkt:" -ForegroundColor Yellow
+    Write-Host "De uitgave staat klaar in $uitgave, maar '$VasteMap' kon niet worden bijgewerkt:" -ForegroundColor Yellow
     Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
     Write-Host "Laat de map $huidig op de server verwijderen en draai publish.ps1 opnieuw, of verwijs de collega's naar $uitgave\Installeer.cmd." -ForegroundColor Yellow
     exit 1
@@ -104,7 +109,7 @@ try {
 Write-Host ""
 Write-Host "Uitgave:  $uitgave" -ForegroundColor Green
 Write-Host "Versie:   $versie" -ForegroundColor Green
-Write-Host "Huidig:   $huidig" -ForegroundColor Green
+Write-Host "Laatste:  $huidig" -ForegroundColor Green
 Write-Host ""
 Write-Host "De collega's dubbelklikken op:" -ForegroundColor Cyan
 Write-Host "  $huidig\Installeer.cmd" -ForegroundColor Cyan
