@@ -57,6 +57,7 @@ _ui = None
 # Handlers moeten in leven blijven: laat je ze los, dan ruimt Python ze op en doet
 # de knop niets meer.
 _handlers = []
+_geactiveerd = None   # de workspaceActivated-handler, om hem bij stoppen los te koppelen
 
 
 def run(context):
@@ -94,6 +95,14 @@ def run(context):
         standaard_definitie = standaardpalet.start(_app, _ui, _handlers, _onderdelen)
 
         _plaats_knoppen([definitie, standaard_definitie])
+
+        # In de schema-editor alleen Standaardcomponenten, op DESIGN.
+        _schema_definities[:] = [standaard_definitie]
+        _zoek_schema_werkruimtes()
+        global _geactiveerd
+        _geactiveerd = _WerkruimteGeactiveerd()
+        _ui.workspaceActivated.add(_geactiveerd)
+        _handlers.append(_geactiveerd)
     except Exception:
         instellingen.log("Starten mislukt:\n" + traceback.format_exc())
         if _ui:
@@ -126,6 +135,14 @@ def stop(context):
             palet.deleteMe()
 
         standaardpalet.stop()
+
+        global _geactiveerd
+        if _geactiveerd is not None:
+            try:
+                _ui.workspaceActivated.remove(_geactiveerd)
+            except Exception:
+                pass
+            _geactiveerd = None
 
         try:
             _app.unregisterCustomEvent(GEBEURTENIS_ID)
@@ -164,31 +181,98 @@ def _plaats_knoppen(definities):
         return
 
     for tab_id in PCB_TABBLADEN:
+        tab = werkruimte.toolbarTabs.itemById(tab_id)
+        if tab is None:
+            instellingen.log(f"Tabblad {tab_id} niet gevonden in {werkruimte.id}.")
+            continue
+        _plaats_in(werkruimte, tab, definities)
+
+
+def _plaats_in(werkruimte, tab, definities):
+    """Zet de knoppen in het paneel MDE op dit tabblad; maakt het paneel als het er niet is."""
+    try:
+        paneel = tab.toolbarPanels.itemById(PANEEL_ID)
+        if paneel is None:
+            paneel = tab.toolbarPanels.add(PANEEL_ID, "MDE")
+
+        for definitie in definities:
+            knop = paneel.controls.itemById(definitie.id)
+            if knop is None:
+                knop = paneel.controls.addCommand(definitie)
+            # Elke keer opnieuw, niet alleen bij aanmaken: Fusion onthoudt de
+            # indeling van een paneel, en zonder promotie staat de knop verstopt
+            # in een uitklaplijst "MDE" in plaats van als grote knop.
+            knop.isPromotedByDefault = True
+            knop.isPromoted = True
+            knop.isVisible = True
+
+        if (werkruimte.id, tab.id) not in _geplaatst:
+            _geplaatst.append((werkruimte.id, tab.id))
+        instellingen.log(f"Knoppen geplaatst: {werkruimte.id} / {tab.id} ({tab.name}).")
+    except Exception as ex:
+        instellingen.log(f"Plaatsen op {werkruimte.id} / {tab.id} mislukt: {type(ex).__name__}: {ex}")
+
+
+# ---------------------------------------------------------------------------
+# De schema-editor: daar hoort de knop Standaardcomponenten ook, op DESIGN.
+# ---------------------------------------------------------------------------
+
+# De werkruimte van het schema is, net als die van het board, alleen via het
+# producttype te vinden; welke naam Autodesk eraan gaf is niet gedocumenteerd.
+# Daarom twee wegen: bij het starten deze kandidaten proberen, en verder
+# meeluisteren wanneer een werkruimte actief wordt en dan op naam herkennen.
+SCHEMA_PRODUCTTYPES = ("ElectronSchematicDocProductType", "ElectronSchDocProductType",
+                       "SchematicDocProductType")
+SCHEMA_KENMERK = re.compile(r"schem", re.IGNORECASE)
+
+_schema_definities = []   # wat er in de schema-editor komt (nu alleen Standaardcomponenten)
+
+
+def _plaats_in_schema_werkruimte(werkruimte):
+    """Zet de schema-knoppen op het tabblad DESIGN van deze werkruimte, een keer."""
+    if any(ws_id == werkruimte.id for ws_id, _ in _geplaatst):
+        return
+    tabs = werkruimte.toolbarTabs
+    namen = []
+    gekozen = None
+    for i in range(tabs.count):
+        tab = tabs.item(i)
+        namen.append(f"{tab.id} ({tab.name})")
+        if gekozen is None and ("design" in tab.id.lower() or tab.name.strip().upper() == "DESIGN"):
+            gekozen = tab
+    if gekozen is None and tabs.count > 0:
+        gekozen = tabs.item(0)
+    instellingen.log(f"Schema-werkruimte {werkruimte.id} ({werkruimte.name}, {werkruimte.productType}); "
+                     f"tabbladen: {', '.join(namen)}")
+    if gekozen is not None:
+        _plaats_in(werkruimte, gekozen, _schema_definities)
+
+
+def _zoek_schema_werkruimtes():
+    for producttype in SCHEMA_PRODUCTTYPES:
         try:
-            tab = werkruimte.toolbarTabs.itemById(tab_id)
-            if tab is None:
-                instellingen.log(f"Tabblad {tab_id} niet gevonden in {werkruimte.id}.")
-                continue
+            lijst = _ui.workspacesByProductType(producttype)
+        except Exception:
+            continue
+        for i in range(lijst.count):
+            ws = lijst.item(i)
+            if SCHEMA_KENMERK.search(f"{ws.id} {ws.name} {ws.productType}"):
+                _plaats_in_schema_werkruimte(ws)
 
-            paneel = tab.toolbarPanels.itemById(PANEEL_ID)
-            if paneel is None:
-                paneel = tab.toolbarPanels.add(PANEEL_ID, "MDE")
 
-            for definitie in definities:
-                knop = paneel.controls.itemById(definitie.id)
-                if knop is None:
-                    knop = paneel.controls.addCommand(definitie)
-                # Elke keer opnieuw, niet alleen bij aanmaken: Fusion onthoudt de
-                # indeling van een paneel, en zonder promotie staat de knop verstopt
-                # in een uitklaplijst "MDE" in plaats van als grote knop.
-                knop.isPromotedByDefault = True
-                knop.isPromoted = True
-                knop.isVisible = True
+class _WerkruimteGeactiveerd(adsk.core.WorkspaceEventHandler):
+    """Herkent de schema-editor zodra hij actief wordt en zet de knop erin."""
 
-            _geplaatst.append((werkruimte.id, tab_id))
-            instellingen.log(f"Knoppen geplaatst: {werkruimte.id} / {tab_id} ({tab.name}).")
-        except Exception as ex:
-            instellingen.log(f"Plaatsen op {tab_id} mislukt: {type(ex).__name__}: {ex}")
+    def notify(self, args):
+        try:
+            ws = args.workspace
+            if ws is None:
+                return
+            kenmerk = f"{ws.id} {ws.name} {ws.productType}"
+            if SCHEMA_KENMERK.search(kenmerk) and "pcb" not in kenmerk.lower() and "board" not in kenmerk.lower():
+                _plaats_in_schema_werkruimte(ws)
+        except Exception:
+            instellingen.log("workspaceActivated mislukt:\n" + traceback.format_exc())
 
 
 def _pcb_werkruimte():

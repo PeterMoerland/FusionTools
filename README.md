@@ -70,7 +70,11 @@ mfgexport met "Execute failed due to reentrancy".
 ## Standaardcomponenten
 
 De tweede knop, **Standaardcomponenten**, vergelijkt alle weerstanden en
-condensatoren van het board met de standaardcomponenten van Eurocircuits. Die
+condensatoren van het board met de standaardcomponenten van Eurocircuits. Hij
+staat ook in de schema-editor, op het tabblad DESIGN in een paneel MDE; daar
+leest hij de parts van het schema in plaats van de elementen van het board. De
+schema-werkruimte wordt herkend op het moment dat hij actief wordt (haar id is
+niet gedocumenteerd); het logboek noemt id, naam en tabbladen. Die
 tabel levert de MDE-app via `GET https://everything.mde-automation.nl/mde/api/componenten`
 met de gedeelde sleutel in de header `X-Sleutel` (instelling
 `componenten_sleutel`, in te voeren via de knop Sleutel… in het venster).

@@ -94,13 +94,22 @@ class _Uitvoeren(adsk.core.CommandEventHandler):
             _ui.messageBox("Het venster kon niet worden geopend:\n\n" + traceback.format_exc(), TITEL)
 
 
+def _actief_ontwerp():
+    """Het open board of schema, of None. In beide staan de R en C met hun attributen."""
+    product = _app.activeProduct
+    ontwerp = adsk.electron.Board.cast(product)
+    if ontwerp is None:
+        ontwerp = adsk.electron.Schematic.cast(product)
+    return ontwerp
+
+
 def _toon_palet():
     global _board
-    board = adsk.electron.Board.cast(_app.activeProduct)
-    if board is None:
-        _ui.messageBox("Open eerst het board (niet het schema).", TITEL)
+    ontwerp = _actief_ontwerp()
+    if ontwerp is None:
+        _ui.messageBox("Open eerst een board of schema.", TITEL)
         return
-    _board = board
+    _board = ontwerp
 
     palet = _ui.palettes.itemById(PALET_ID)
     if palet is None:
@@ -125,6 +134,9 @@ def _sluit_palet():
 
 
 def _onderdelen():
+    if adsk.electron.Schematic.cast(_board) is not None:
+        return _onderdelen_schema(adsk.electron.Schematic.cast(_board))
+
     resultaat = []
     for o in _lees_onderdelen(_board):
         resultaat.append(standaard.Onderdeel(
@@ -138,11 +150,53 @@ def _onderdelen():
     return resultaat
 
 
+def _onderdelen_schema(schema):
+    """De parts van het schema. De footprint komt van het device; de attributen
+    zijn dezelfde als op het board (MPN, GPN, PACKAGE_SIZE)."""
+    resultaat = []
+    parts = schema.parts
+    for i in range(parts.count):
+        part = parts.item(i)
+
+        attributen = {}
+        try:
+            for j in range(part.attributes.count):
+                a = part.attributes.item(j)
+                attributen[a.name] = a.value
+        except Exception:
+            instellingen.log(f"Attributen van {part.name} niet leesbaar:\n" + traceback.format_exc())
+
+        footprint = ""
+        try:
+            device = part.device
+            if device is not None and device.package is not None:
+                footprint = device.package.name or ""
+        except Exception:
+            pass
+
+        resultaat.append(standaard.Onderdeel(
+            naam=part.name,
+            waarde=part.value or attributen.get("VALUE", "") or "",
+            footprint=footprint,
+            mpn=attributen.get("MPN", "") or "",
+            gpn=attributen.get("GPN", "") or "",
+            package_size=attributen.get("PACKAGE_SIZE", "") or "",
+            populate=True))
+    return resultaat
+
+
+def _naam_van(ontwerp):
+    try:
+        return ontwerp.name if ontwerp is not None else ""
+    except Exception:
+        return ""
+
+
 def _stand(melding="", fout=False):
     """Alles wat de pagina toont, als dict. Een fout bij het ophalen wordt een melding."""
     huidig = instellingen.laad()
     stand = {
-        "board": _board.name if _board else "",
+        "board": _naam_van(_board),
         "uitkomsten": [],
         "aantal_componenten": 0,
         "melding": melding,
@@ -244,10 +298,9 @@ class _Toepassen(adsk.core.CustomEventHandler):
                     palet.sendInfoToHTML("melding", "Niets om bij te werken.")
                 return
 
-            board = adsk.electron.Board.cast(_app.activeProduct)
-            if board is None:
+            if _actief_ontwerp() is None:
                 if palet:
-                    palet.sendInfoToHTML("melding", "Het board is niet meer actief.")
+                    palet.sendInfoToHTML("melding", "Het board of schema is niet meer actief.")
                 return
 
             antwoord = _voer_script_uit(regels)
