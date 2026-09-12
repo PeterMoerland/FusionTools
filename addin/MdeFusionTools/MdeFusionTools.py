@@ -98,7 +98,11 @@ def run(context):
 
         # In de schema-editor alleen Standaardcomponenten, op DESIGN.
         _schema_definities[:] = [standaard_definitie]
-        _zoek_schema_werkruimtes()
+        try:
+            _zoek_schema_werkruimtes()
+        except Exception:
+            # Dan pas bij het activeren van het schema; de rest moet gewoon starten.
+            instellingen.log("Schema-werkruimte zoeken mislukt:\n" + traceback.format_exc())
         global _geactiveerd
         _geactiveerd = _WerkruimteGeactiveerd()
         _ui.workspaceActivated.add(_geactiveerd)
@@ -231,21 +235,33 @@ _schema_definities = []   # wat er in de schema-editor komt (nu alleen Standaard
 def _plaats_in_schema_werkruimte(werkruimte):
     """Zet de schema-knoppen op het tabblad DESIGN van deze werkruimte, een keer."""
     if any(ws_id == werkruimte.id for ws_id, _ in _geplaatst):
-        return
-    tabs = werkruimte.toolbarTabs
+        return True
+
+    # De tabbladen zijn er pas nadat de werkruimte een keer actief is geweest;
+    # daarvoor geeft toolbarTabs een InternalValidationError. Dan komt het
+    # plaatsen later, via workspaceActivated.
+    try:
+        tabs = werkruimte.toolbarTabs
+        aantal = tabs.count
+    except Exception as ex:
+        instellingen.log(f"Schema-werkruimte {werkruimte.id} ({werkruimte.name}, {werkruimte.productType}) "
+                         f"gevonden, maar de werkbalk is nog niet geladen: {type(ex).__name__}: {ex}")
+        return False
+
     namen = []
     gekozen = None
-    for i in range(tabs.count):
+    for i in range(aantal):
         tab = tabs.item(i)
         namen.append(f"{tab.id} ({tab.name})")
         if gekozen is None and ("design" in tab.id.lower() or tab.name.strip().upper() == "DESIGN"):
             gekozen = tab
-    if gekozen is None and tabs.count > 0:
+    if gekozen is None and aantal > 0:
         gekozen = tabs.item(0)
     instellingen.log(f"Schema-werkruimte {werkruimte.id} ({werkruimte.name}, {werkruimte.productType}); "
                      f"tabbladen: {', '.join(namen)}")
     if gekozen is not None:
         _plaats_in(werkruimte, gekozen, _schema_definities)
+    return gekozen is not None
 
 
 def _zoek_schema_werkruimtes():
