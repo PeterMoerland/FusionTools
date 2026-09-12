@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Standaardcomponenten</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #f5f5f5; color: #222;
+               font: 13px "Segoe UI", system-ui, sans-serif; }
+  body { padding: 10px 12px; }
+  h1 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+  .samenvatting { font-size: 12px; color: #555; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #e3e3e3; vertical-align: top; }
+  th { background: #ececec; font-weight: 600; position: sticky; top: 0; }
+  td.klein, th.klein { width: 1%; white-space: nowrap; }
+  tr.standaard td { color: #2a7a2a; }
+  tr.geen td, tr.onleesbaar td { color: #8a5a00; }
+  select { max-width: 320px; font: inherit; }
+  .opm { font-size: 11px; color: #a04000; }
+  .huidig { font-family: Consolas, monospace; font-size: 12px; color: #444; }
+  .knoppen { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .knoppen .rechts { display: flex; gap: 8px; }
+  button { font: inherit; padding: 4px 10px; cursor: pointer; }
+  .primair { background: #0696d7; color: #fff; border: 1px solid #0578ad; padding: 5px 16px; }
+  .primair:disabled { background: #9cc; border-color: #9cc; cursor: default; }
+  .info { font-size: 12px; color: #666; }
+  .fout { color: #b00; }
+  .scroll { max-height: calc(100vh - 130px); overflow: auto; border: 1px solid #ddd; }
+</style>
+</head>
+<body>
+  <h1 id="kop">Standaardcomponenten</h1>
+  <div class="samenvatting" id="samenvatting"></div>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th class="klein"><input type="checkbox" id="alles" onchange="allesAan(this.checked)" title="Alles aan of uit"></th>
+          <th class="klein">Naam</th>
+          <th>Waarde</th>
+          <th class="klein">Maat</th>
+          <th>Huidige MPN</th>
+          <th>Standaardcomponent</th>
+        </tr>
+      </thead>
+      <tbody id="rijen"></tbody>
+    </table>
+  </div>
+
+  <div class="knoppen">
+    <div class="info" id="info"></div>
+    <div class="rechts">
+      <button type="button" onclick="stuur('sleutel')" title="De gedeelde sleutel voor de MDE-app invoeren">Sleutel…</button>
+      <button type="button" onclick="stuur('vernieuwen')">Opnieuw controleren</button>
+      <button type="button" onclick="stuur('sluiten')">Sluiten</button>
+      <button type="button" class="primair" id="toepassen" onclick="toepassen()" disabled>MPN bijwerken</button>
+    </div>
+  </div>
+
+<script>
+  var stand = null;
+
+  function stuur(actie, gegevens) {
+    try { adsk.fusionSendData(actie, JSON.stringify(gegevens || {})); }
+    catch (e) { melding("Geen verbinding met Fusion: " + e, true); }
+  }
+
+  function melding(tekst, fout) {
+    var info = document.getElementById("info");
+    info.textContent = tekst || "";
+    info.className = fout ? "info fout" : "info";
+  }
+
+  function toepassen() {
+    var keuzes = [];
+    document.querySelectorAll("tr[data-naam]").forEach(function (rij) {
+      var vink = rij.querySelector("input[type=checkbox]");
+      var lijst = rij.querySelector("select");
+      if (vink && vink.checked && lijst && lijst.value) {
+        keuzes.push({ naam: rij.dataset.naam, gpn: lijst.value });
+      }
+    });
+    if (!keuzes.length) { melding("Niets aangevinkt."); return; }
+    document.getElementById("toepassen").disabled = true;
+    melding("Bezig met " + keuzes.length + " onderdelen…");
+    stuur("toepassen", { keuzes: keuzes });
+  }
+
+  function allesAan(aan) {
+    document.querySelectorAll("tr[data-naam] input[type=checkbox]").forEach(function (v) {
+      if (!v.disabled) { v.checked = aan; }
+    });
+    telKnop();
+  }
+
+  function telKnop() {
+    var n = document.querySelectorAll("tr[data-naam] input[type=checkbox]:checked").length;
+    var knop = document.getElementById("toepassen");
+    knop.disabled = n === 0;
+    knop.textContent = n ? "MPN bijwerken (" + n + ")" : "MPN bijwerken";
+  }
+
+  function toon(nieuw) {
+    stand = nieuw;
+    document.getElementById("kop").textContent = "Standaardcomponenten: " + (stand.board || "");
+    var body = document.getElementById("rijen");
+    body.innerHTML = "";
+
+    var tellers = { standaard: 0, voorstel: 0, geen: 0, onleesbaar: 0 };
+    (stand.uitkomsten || []).forEach(function (u) {
+      tellers[u.status] = (tellers[u.status] || 0) + 1;
+      var rij = document.createElement("tr");
+      rij.className = u.status;
+      rij.dataset.naam = u.naam;
+
+      var cel = document.createElement("td"); cel.className = "klein";
+      var vink = document.createElement("input"); vink.type = "checkbox";
+      vink.disabled = u.status !== "voorstel";
+      vink.checked = u.status === "voorstel";
+      vink.onchange = telKnop;
+      cel.appendChild(vink); rij.appendChild(cel);
+
+      cel = document.createElement("td"); cel.className = "klein"; cel.textContent = u.naam; rij.appendChild(cel);
+      cel = document.createElement("td"); cel.textContent = u.waarde; rij.appendChild(cel);
+      cel = document.createElement("td"); cel.className = "klein"; cel.textContent = u.grootte || "?"; rij.appendChild(cel);
+      cel = document.createElement("td"); cel.className = "huidig"; cel.textContent = u.mpn || "(leeg)"; rij.appendChild(cel);
+
+      cel = document.createElement("td");
+      if (u.status === "voorstel") {
+        var lijst = document.createElement("select");
+        u.kandidaten.forEach(function (k, i) {
+          var optie = document.createElement("option");
+          optie.value = k.gpn;
+          optie.textContent = k.gpn + "  —  " + k.omschrijving;
+          if (k.opmerkingen && k.opmerkingen.length) { optie.textContent += "  (" + k.opmerkingen.join("; ") + ")"; }
+          optie.selected = i === 0;
+          lijst.appendChild(optie);
+        });
+        lijst.title = "Kies welk standaardcomponent in MPN komt";
+        cel.appendChild(lijst);
+        if (u.toelichting) {
+          var opm = document.createElement("div"); opm.className = "opm"; opm.textContent = u.toelichting;
+          cel.appendChild(opm);
+        }
+      } else {
+        cel.textContent = u.toelichting || "";
+      }
+      rij.appendChild(cel);
+      body.appendChild(rij);
+    });
+
+    document.getElementById("samenvatting").textContent =
+      (stand.uitkomsten || []).length + " weerstanden en condensatoren: " +
+      tellers.standaard + " al standaard, " + tellers.voorstel + " met voorstel, " +
+      tellers.geen + " zonder standaardcomponent, " + tellers.onleesbaar + " niet te lezen. " +
+      "Standaardcomponenten in de tabel: " + (stand.aantal_componenten || 0) + ".";
+    document.getElementById("alles").checked = tellers.voorstel > 0;
+    telKnop();
+    melding(stand.melding || "", !!stand.fout);
+  }
+
+  window.fusionJavaScriptHandler = {
+    handle: function (actie, gegevens) {
+      try {
+        if (actie === "stand") { toon(JSON.parse(gegevens)); }
+        else if (actie === "melding") { melding(gegevens, true); telKnop(); }
+        else if (actie === "bezig") { melding(gegevens, false); }
+      } catch (e) { melding("Fout: " + e, true); }
+      return "OK";
+    }
+  };
+
+  var pogingen = 0;
+  function meldKlaar() {
+    if (window.adsk && typeof adsk.fusionSendData === "function") { stuur("klaar"); return; }
+    pogingen += 1;
+    if (pogingen % 25 === 0) { melding("Wachten op Fusion… (" + (pogingen / 5) + " s)"); }
+    setTimeout(meldKlaar, 200);
+  }
+  window.addEventListener("load", meldKlaar);
+</script>
+</body>
+</html>

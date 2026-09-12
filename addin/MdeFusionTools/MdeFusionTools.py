@@ -32,6 +32,7 @@ from . import bom
 from . import camjob
 from . import cpl
 from . import instellingen
+from . import standaardpalet
 
 COMMANDO_ID = "MDE_PcbUitvoer"
 PANEEL_ID = "MDE_Paneel"
@@ -89,7 +90,10 @@ def run(context):
         gebeurtenis.add(starten)
         _handlers.append(starten)
 
-        _plaats_knop(definitie)
+        # De tweede knop: R en C controleren tegen de standaardcomponenten.
+        standaard_definitie = standaardpalet.start(_app, _ui, _handlers, _onderdelen)
+
+        _plaats_knoppen([definitie, standaard_definitie])
     except Exception:
         instellingen.log("Starten mislukt:\n" + traceback.format_exc())
         if _ui:
@@ -103,9 +107,10 @@ def stop(context):
                 tab = _ui.workspaces.itemById(ws_id).toolbarTabs.itemById(tab_id)
                 paneel = tab.toolbarPanels.itemById(PANEEL_ID) if tab else None
                 if paneel:
-                    knop = paneel.controls.itemById(COMMANDO_ID)
-                    if knop:
-                        knop.deleteMe()
+                    for knop_id in (COMMANDO_ID, standaardpalet.COMMANDO_ID):
+                        knop = paneel.controls.itemById(knop_id)
+                        if knop:
+                            knop.deleteMe()
                     if paneel.controls.count == 0:
                         paneel.deleteMe()
             except Exception:
@@ -119,6 +124,8 @@ def stop(context):
         palet = _ui.palettes.itemById(PALET_ID)
         if palet:
             palet.deleteMe()
+
+        standaardpalet.stop()
 
         try:
             _app.unregisterCustomEvent(GEBEURTENIS_ID)
@@ -143,8 +150,8 @@ PCB_TABBLADEN = ("EaglePcbManufacturing",)
 _geplaatst = []   # (werkruimte-id, tab-id) van elk paneel dat we hebben gemaakt
 
 
-def _plaats_knop(definitie):
-    """Zet de knop in een eigen paneel MDE op de werkbalk van de PCB-editor.
+def _plaats_knoppen(definities):
+    """Zet de knoppen in een eigen paneel MDE op de werkbalk van de PCB-editor.
 
     De werkbalk van deze werkruimte is niet via workspace.toolbarPanels te
     bereiken (dat geeft een InternalValidationError), wel via de tabbladen:
@@ -167,18 +174,19 @@ def _plaats_knop(definitie):
             if paneel is None:
                 paneel = tab.toolbarPanels.add(PANEEL_ID, "MDE")
 
-            knop = paneel.controls.itemById(COMMANDO_ID)
-            if knop is None:
-                knop = paneel.controls.addCommand(definitie)
-            # Elke keer opnieuw, niet alleen bij aanmaken: Fusion onthoudt de
-            # indeling van een paneel, en zonder promotie staat de knop verstopt
-            # in een uitklaplijst "MDE" in plaats van als grote knop.
-            knop.isPromotedByDefault = True
-            knop.isPromoted = True
-            knop.isVisible = True
+            for definitie in definities:
+                knop = paneel.controls.itemById(definitie.id)
+                if knop is None:
+                    knop = paneel.controls.addCommand(definitie)
+                # Elke keer opnieuw, niet alleen bij aanmaken: Fusion onthoudt de
+                # indeling van een paneel, en zonder promotie staat de knop verstopt
+                # in een uitklaplijst "MDE" in plaats van als grote knop.
+                knop.isPromotedByDefault = True
+                knop.isPromoted = True
+                knop.isVisible = True
 
             _geplaatst.append((werkruimte.id, tab_id))
-            instellingen.log(f"Knop geplaatst: {werkruimte.id} / {tab_id} ({tab.name}).")
+            instellingen.log(f"Knoppen geplaatst: {werkruimte.id} / {tab_id} ({tab.name}).")
         except Exception as ex:
             instellingen.log(f"Plaatsen op {tab_id} mislukt: {type(ex).__name__}: {ex}")
 

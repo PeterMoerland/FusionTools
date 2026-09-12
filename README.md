@@ -67,8 +67,29 @@ venster verdwijnt of zichzelf uitvoert. Een palet blijft staan. De export zelf
 start via een custom event nadat het palet dicht is, anders weigert Fusion
 mfgexport met "Execute failed due to reentrancy".
 
+## Standaardcomponenten
+
+De tweede knop, **Standaardcomponenten**, vergelijkt alle weerstanden en
+condensatoren van het board met de standaardcomponenten van Eurocircuits. Die
+tabel levert de MDE-app via `GET https://everything.mde-automation.nl/mde/api/componenten`
+met de gedeelde sleutel in de header `X-Sleutel` (instelling
+`componenten_sleutel`, in te voeren via de knop Sleutel… in het venster).
+
+Per R en C leest de add-in de waardetekst (`100nF 16V X7R 10%`, `4k7 1/4W`)
+en de behuizingsmaat (attribuut `PACKAGE_SIZE`, anders uit de footprintnaam:
+`RESC1005X40` is 0402) en zoekt de standaardcomponenten met dezelfde soort,
+maat en waarde. Spanning, dielectricum, tolerantie en vermogen bepalen de
+volgorde; een lagere spanning of ruimere tolerantie dan gevraagd staat erbij
+als opmerking. Staat het GPN al in `MPN`, dan is het onderdeel al standaard.
+
+Aangevinkte regels krijgen met **MPN bijwerken** het gekozen GPN in het
+attribuut `MPN`. De API laat attributen alleen lezen; het schrijven gaat met een
+EAGLE-script (`ATTRIBUTE R9 MPN 'GPR0402103';`) via `Electron.runScript`.
+Daarna moet het board nog opgeslagen worden.
+
 Instellingen staan in `%APPDATA%\MDE\FusionTools\instellingen.json`
-(`uitvoermap`, `jobmap`, `laatste_job`); het logboek in
+(`uitvoermap`, `jobmap`, `laatste_job`, `componenten_sleutel`, optioneel
+`componenten_url` en `componenten_certificaat`); het logboek in
 `%LOCALAPPDATA%\MDE\FusionTools\fusiontools.log`. De standaard jobmap is
 `Z:\Fusion PCB\CAM processor job files`.
 
