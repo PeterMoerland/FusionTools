@@ -72,12 +72,26 @@ Instellingen staan in `%APPDATA%\MDE\FusionTools\instellingen.json`
 `%LOCALAPPDATA%\MDE\FusionTools\fusiontools.log`. De standaard jobmap is
 `Z:\Fusion PCB\CAM processor job files`.
 
-## Installeren
+## Uitgeven en installeren
 
-Kopieer `addin\MdeFusionTools` naar
-`%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\MdeFusionTools\`
-en zet de add-in aan via Utilities → Add-Ins (Shift+S); hij start daarna mee
-met Fusion.
+Een uitgave klaarzetten op de share (draait eerst de tests):
+
+    .\publish.ps1
+
+Dat maakt `\\172.16.1.4\data\Fusion PCB\Apps\MdeFusionTools\<datum-tijd>\`
+met de add-in, `install.ps1` en `Installeer.cmd`, en ververst `huidig\` naar
+die laatste uitgave. Een andere plek: `-Doel <pad>`.
+
+Collega's dubbelklikken op
+
+    \\172.16.1.4\data\Fusion PCB\Apps\MdeFusionTools\huidig\Installeer.cmd
+
+en starten Fusion (opnieuw). Dat kopieert de add-in naar
+`%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\MdeFusionTools\`; Fusion
+start hem daarna automatisch mee. Staat hij niet aan: Shift+S, tabblad
+Add-Ins, MdeFusionTools, Run, met "Run on Startup" aangevinkt.
+
+Handmatig installeren kan ook: kopieer `addin\MdeFusionTools` naar die map.
 
 ## Tests
 
