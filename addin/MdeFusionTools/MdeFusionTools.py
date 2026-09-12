@@ -91,12 +91,14 @@ def run(context):
         gebeurtenis.add(starten)
         _handlers.append(starten)
 
-        # De tweede knop: R en C controleren tegen de standaardcomponenten.
+        # De tweede knop: R en C controleren tegen de standaardcomponenten. Alleen in
+        # de schema-editor: het schema is leidend voor attributen, en een GPN dat in
+        # het board wordt gezet komt niet vanzelf in het schema terecht.
         standaard_definitie = standaardpalet.start(_app, _ui, _handlers, _onderdelen)
 
-        _plaats_knoppen([definitie, standaard_definitie])
+        _plaats_knoppen([definitie])
 
-        # In de schema-editor alleen Standaardcomponenten, op DESIGN.
+        # Standaardcomponenten staat in de schema-editor op DESIGN.
         _schema_definities[:] = [standaard_definitie]
         try:
             _zoek_schema_werkruimtes()
