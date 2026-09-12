@@ -2,10 +2,11 @@
 Eurocircuits, zoals de MDE-app die aanbiedt (api/componenten).
 
 Buiten Fusion te testen. Een standaardcomponent heeft een General Part Number
-(GPN); staat dat in het attribuut MPN van een element, dan herkent de latere
+(GPN); staat dat in het attribuut GPN van een element, dan herkent de latere
 BOM-verwerking het als standaardcomponent. Deze module leest de waarde van een
 element ("100nF 16V X7R 10%", "4k7 1/4W"), bepaalt de behuizingsmaat en zoekt
-de passende standaardcomponenten; de add-in zet daarna het gekozen GPN in MPN.
+de passende standaardcomponenten; de add-in zet daarna het gekozen GPN in het
+attribuut GPN. MPN blijft het fabrikantnummer, voor andere leveranciers.
 """
 
 import re
@@ -40,6 +41,7 @@ class Onderdeel:
     waarde: str
     footprint: str
     mpn: str = ""
+    gpn: str = ""
     package_size: str = ""
     populate: bool = True
 
@@ -73,6 +75,7 @@ class Uitkomst:
     status: str           # standaard | voorstel | geen | onleesbaar | overgeslagen
     kandidaten: list = field(default_factory=list)
     toelichting: str = ""
+    gpn: str = ""
 
     @property
     def voorstel(self):
@@ -314,12 +317,13 @@ def controleer(onderdelen, componenten):
 
         grootte = grootte_van(o.package_size, o.footprint)
         mpn = (o.mpn or "").strip()
+        gpn = (o.gpn or "").strip()
         uitkomst = Uitkomst(naam=o.naam, soort=soort, waarde=o.waarde or "", grootte=grootte,
-                            mpn=mpn, status="geen")
+                            mpn=mpn, status="geen", gpn=gpn)
 
-        if mpn.upper() in gpns:
+        if gpn.upper() in gpns:
             uitkomst.status = "standaard"
-            uitkomst.toelichting = "MPN is al een standaardcomponent."
+            uitkomst.toelichting = "GPN is al een standaardcomponent."
             uitkomsten.append(uitkomst)
             continue
 
@@ -349,7 +353,7 @@ def _natuurlijk(tekst):
 
 
 def script_regels(toewijzingen):
-    """EAGLE-scriptregels die het attribuut MPN zetten: [(naam, gpn), ...].
+    """EAGLE-scriptregels die het attribuut GPN zetten: [(naam, gpn), ...].
 
     Attributen zijn via de API alleen te lezen; schrijven gaat met het
     EAGLE-commando ATTRIBUTE, uitgevoerd als script (Electron.runScript).
@@ -359,5 +363,5 @@ def script_regels(toewijzingen):
         if not naam or not gpn:
             continue
         veilig = str(gpn).replace("'", "")
-        regels.append(f"ATTRIBUTE {naam} MPN '{veilig}';")
+        regels.append(f"ATTRIBUTE {naam} GPN '{veilig}';")
     return regels
