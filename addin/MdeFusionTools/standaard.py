@@ -364,4 +364,9 @@ def script_regels(toewijzingen):
             continue
         veilig = str(gpn).replace("'", "")
         regels.append(f"ATTRIBUTE {naam} GPN '{veilig}';")
-    return regels
+    if not regels:
+        return []
+    # Bestaat het attribuut al met een andere waarde, dan vraagt EAGLE per
+    # onderdeel om bevestiging ("already exists, overwrite?"). In een script
+    # beantwoordt SET CONFIRM YES die vraag; daarna weer uit.
+    return ["SET CONFIRM YES;"] + regels + ["SET CONFIRM OFF;"]

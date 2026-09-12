@@ -334,12 +334,13 @@ class _Toepassen(adsk.core.CustomEventHandler):
                     palet.sendInfoToHTML("melding", "Het board of schema is niet meer actief.")
                 return
 
+            aantal = sum(1 for naam, gpn in keuzes if naam and gpn)
             antwoord = _voer_script_uit(regels)
-            instellingen.log(f"GPN bijgewerkt voor {len(regels)} onderdelen; antwoord: {antwoord!r}")
+            instellingen.log(f"GPN bijgewerkt voor {aantal} onderdelen; antwoord: {antwoord!r}")
 
             # Opnieuw controleren: wat net een voorstel was, is nu standaard.
             if palet:
-                _stuur_stand(palet, f"GPN bijgewerkt voor {len(regels)} onderdelen. "
+                _stuur_stand(palet, f"GPN bijgewerkt voor {aantal} onderdelen. "
                                     "Sla het board op om het te bewaren.")
         except Exception:
             instellingen.log("GPN bijwerken mislukt:\n" + traceback.format_exc())

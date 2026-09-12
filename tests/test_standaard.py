@@ -203,7 +203,10 @@ class ScriptTest(unittest.TestCase):
 
     def test_attribute_regels(self):
         regels = standaard.script_regels([("R9", "GPR0402103"), ("C7", "GPC0402104"), ("", "X"), ("R1", "")])
-        self.assertEqual(regels, ["ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE C7 GPN 'GPC0402104';"])
+        self.assertEqual(regels, ["SET CONFIRM YES;",
+                                  "ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE C7 GPN 'GPC0402104';",
+                                  "SET CONFIRM OFF;"])
+        self.assertEqual(standaard.script_regels([("", "X")]), [])
 
 
 if __name__ == "__main__":
