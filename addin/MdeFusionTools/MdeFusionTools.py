@@ -506,11 +506,12 @@ def _argument(pad):
     return f'"{pad}"' if " " in pad else pad
 
 
-# Namen van koperlagen zoals EAGLE en Fusion ze geven: Top, Bottom, Route2..15,
-# en de nieuwere stackup-namen. De nummering is niet meer de EAGLE-reeks 1..16:
-# in de CAM-jobs van Fusion is de onderkant bijvoorbeeld laag 304 en de tweede
-# binnenlaag 303. Daarom telt de naam mee en niet alleen het nummer.
-KOPERLAAG_NAAM = re.compile(r"^(top|bottom|route\s?\d+|inner\s?\d*|signal\s?\d*|l\d+)$", re.IGNORECASE)
+# Namen van koperlagen zoals Fusion en EAGLE ze geven. Fusion nummert niet meer
+# als EAGLE (1..16): een 8-laags board heeft 1:Top, 2:Layer2, 3:Layer3,
+# 4:Layer4, 301:Layer5, 302:Layer6, 303:Layer7, 304:Bottom. EAGLE-boards hebben
+# Route2..Route15. Daarom telt de naam mee en niet alleen het nummer.
+KOPERLAAG_NAAM = re.compile(r"^(top|bottom|layer\s?\d+|route\s?\d+|inner\s?\d*|signal\s?\d*|l\d+)$",
+                            re.IGNORECASE)
 
 
 def _koperlagen(board):
