@@ -181,6 +181,17 @@ def _onderdelen_schema(schema):
     PACKAGE_SIZE; alleen een part zonder dat attribuut valt daardoor onder
     "maat niet te bepalen". Elke stap wordt gelogd om een crash te kunnen plaatsen.
     """
+    # De footprint komt van het gekoppelde board (elementen uitlezen is veilig
+    # gebleken), zodat een part zonder PACKAGE_SIZE toch een maat krijgt.
+    footprints = {}
+    try:
+        board = schema.linkedBoard
+        if board is not None:
+            footprints = {o.naam: o.footprint for o in _lees_onderdelen(board)}
+            instellingen.log(f"Schema: footprints van {len(footprints)} elementen uit het gekoppelde board.")
+    except Exception:
+        instellingen.log("Gekoppeld board niet leesbaar:\n" + traceback.format_exc())
+
     resultaat = []
     parts = schema.parts
     aantal = parts.count
@@ -207,7 +218,7 @@ def _onderdelen_schema(schema):
         resultaat.append(standaard.Onderdeel(
             naam=naam,
             waarde=waarde or attributen.get("VALUE", "") or "",
-            footprint="",
+            footprint=footprints.get(naam, ""),
             mpn=attributen.get("MPN", "") or "",
             gpn=attributen.get("GPN", "") or "",
             package_size=attributen.get("PACKAGE_SIZE", "") or "",
