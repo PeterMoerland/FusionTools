@@ -81,10 +81,25 @@ Copy-Item -Path (Join-Path $projectRoot 'Installeer.cmd') -Destination $uitgave 
 
 # 'huidig' wijst altijd naar de laatste uitgave, zodat de snelkoppeling die de
 # collega's gebruiken niet elke keer verandert.
+#
+# De map zelf blijft staan en alleen de inhoud wordt vervangen. Een map op de
+# share verwijderen en meteen opnieuw aanmaken liet op de NAS een map achter die
+# voor niemand meer toegankelijk was ("Toegang geweigerd", ook voor rd).
 $huidig = Join-Path $Doel 'huidig'
-if (Test-Path $huidig) { Remove-Item $huidig -Recurse -Force }
-New-Item -ItemType Directory -Path $huidig -Force | Out-Null
-Copy-Item -Path (Join-Path $uitgave '*') -Destination $huidig -Recurse -Force
+try {
+    if (Test-Path $huidig) {
+        Get-ChildItem $huidig -Force | Remove-Item -Recurse -Force
+    } else {
+        New-Item -ItemType Directory -Path $huidig -Force | Out-Null
+    }
+    Copy-Item -Path (Join-Path $uitgave '*') -Destination $huidig -Recurse -Force
+} catch {
+    Write-Host ""
+    Write-Host "De uitgave staat klaar in $uitgave, maar 'huidig' kon niet worden bijgewerkt:" -ForegroundColor Yellow
+    Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Laat de map $huidig op de server verwijderen en draai publish.ps1 opnieuw, of verwijs de collega's naar $uitgave\Installeer.cmd." -ForegroundColor Yellow
+    exit 1
+}
 
 Write-Host ""
 Write-Host "Uitgave:  $uitgave" -ForegroundColor Green
