@@ -59,10 +59,6 @@ Wat daarover is vastgesteld (Fusion 2705.1.15):
   MANUFACTURER, DESCRIPTION, PACKAGE_SIZE`, elk veld tussen
   aanhalingstekens. Onderdelen met fabrikant `MDE` (soldeerpads, montagegaten)
   blijven eruit; niet-geplaatste ook.
-- Dezelfde regels staan er nog een keer naast als `<board>-BOM-JLCPCB.csv` in
-  het formaat van JLCPCB: `Comment` (de waarde), `Designator` (referenties met
-  komma), `Footprint`, plus `MPN`; elk veld tussen aanhalingstekens, zonder
-  byte order mark.
 
 Het keuzevenster is een palet (`resources/pcbuitvoer.html`) en geen
 commandovenster: in de PCB-editor is altijd een EAGLE-commando actief dat een

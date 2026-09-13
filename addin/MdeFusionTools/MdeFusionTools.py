@@ -526,8 +526,6 @@ def _voer_uit(board, boardnaam, job, doelmap):
     os.makedirs(assembly, exist_ok=True)
     bom_pad = os.path.join(assembly, f"{boardnaam}-BOM.csv")
     bom.schrijf(bom_pad, regels)
-    # Dezelfde regels in het formaat van JLCPCB, als tweede bestand ernaast.
-    bom.schrijf_jlcpcb(os.path.join(assembly, f"{boardnaam}-BOM-JLCPCB.csv"), regels)
     voor = cpl.rijen(plaatsingen, achterkant=False)
     achter = cpl.rijen(plaatsingen, achterkant=True)
     cpl.schrijf(os.path.join(assembly, f"PnP_{boardnaam}_CPL_front.csv"), plaatsingen, achterkant=False)
@@ -554,8 +552,7 @@ def _voer_uit(board, boardnaam, job, doelmap):
 
     samenvatting = [
         f"Gerber en drill: {gerbers} bestanden, met job {os.path.basename(job)}.",
-        f"Stuklijst: {len(regels)} regels; {eigen} eigen onderdelen (fabrikant {bom.EIGEN_FABRIKANT}) weggelaten. "
-        f"Ook als {boardnaam}-BOM-JLCPCB.csv.",
+        f"Stuklijst: {len(regels)} regels; {eigen} eigen onderdelen (fabrikant {bom.EIGEN_FABRIKANT}) weggelaten.",
         f"Pick-and-place: {len(voor)} onderdelen boven, {len(achter)} onder.",
         f"Zip: {zip_naam} ({aantal} bestanden).",
     ]

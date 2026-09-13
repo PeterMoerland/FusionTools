@@ -96,28 +96,6 @@ class SchrijfTest(unittest.TestCase):
         self.assertIn('"0402"', ruw)
         self.assertIn('"1"', ruw)  # ook het aantal
 
-    def test_jlcpcb_drie_kolommen_plus_mpn_alles_gequote(self):
-        regels = bom.bouw([
-            deel("C2", "100nF", "CAPC1005X60", MPN="CL05B104KO5NNNC"),
-            deel("C9", "100nF", "CAPC1005X60", MPN="CL05B104KO5NNNC"),
-            deel("C1", "100uF", "CAPC3225X135", MPN="885012109004"),
-            deel("R1", "10k, 1%", "RESC1005X40"),
-        ])
-        with tempfile.TemporaryDirectory() as map_:
-            pad = os.path.join(map_, "jlc.csv")
-            bom.schrijf_jlcpcb(pad, regels)
-            with open(pad, "rb") as f:
-                ruw = f.read()
-        tekst = ruw.decode("utf-8")
-
-        self.assertFalse(ruw.startswith(b"\xef\xbb\xbf"), "geen byte order mark voor JLCPCB")
-        self.assertEqual(tekst.splitlines(), [
-            '"Comment","Designator","Footprint","MPN"',
-            '"100uF","C1","CAPC3225X135","885012109004"',
-            '"100nF","C2, C9","CAPC1005X60","CL05B104KO5NNNC"',
-            '"10k, 1%","R1","RESC1005X40",""',
-        ])
-
     def test_micro_teken_overleeft_de_rondgang(self):
         regels = bom.bouw([deel("C1", "2.2µF 100V", "CAPC", MPN="M")])
         rijen, _ = self._schrijf_en_lees(regels)
