@@ -122,3 +122,23 @@ def schrijf(pad, regels):
                 [r.aantal, ", ".join(r.referenties), r.waarde, r.footprint]
                 + [r.attributen[k] for k in KOLOM_ATTRIBUTEN]
             )
+
+
+# De stuklijst zoals JLCPCB hem wil: Comment (de waarde), Designator (de
+# referenties, gescheiden door komma of spatie), Footprint, en als extra kolom
+# de MPN. Dezelfde regels als de algemene stuklijst, dus dezelfde groepering.
+KOPREGEL_JLCPCB = ("Comment", "Designator", "Footprint", "MPN")
+
+
+def schrijf_jlcpcb(pad, regels):
+    """Schrijft de regels in het formaat van JLCPCB, elk veld tussen aanhalingstekens.
+
+    Zonder byte order mark: het eerste veld van de kopregel moet letterlijk
+    "Comment" zijn voor de importeur van JLCPCB, en een onzichtbaar teken
+    ervoor kan dat verstoren. Excel is hier niet de lezer.
+    """
+    with open(pad, "w", newline="", encoding="utf-8") as bestand:
+        schrijver = csv.writer(bestand, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
+        schrijver.writerow(KOPREGEL_JLCPCB)
+        for r in regels:
+            schrijver.writerow([r.waarde, ", ".join(r.referenties), r.footprint, r.attributen.get("MPN", "")])
