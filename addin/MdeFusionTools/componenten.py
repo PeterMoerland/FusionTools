@@ -15,6 +15,7 @@ Staat het er niet, dan kan een pad naar mde-root.crt worden meegegeven.
 """
 
 import json
+import os
 import ssl
 import time
 import urllib.error
@@ -44,6 +45,14 @@ def haal(url, sleutel, certificaat=None, vernieuw=False):
 
     aanvraag = urllib.request.Request(url, headers={"X-Sleutel": sleutel, "Accept": "application/json"})
     context = ssl.create_default_context()
+    # Het bedrijfscertificaat (de Caddy-root van de MDE-app) gaat met de add-in
+    # mee, zodat het niet op elke pc in de Windows-winkel hoeft te staan.
+    meegeleverd = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "mde-root.crt")
+    if os.path.isfile(meegeleverd):
+        try:
+            context.load_verify_locations(meegeleverd)
+        except (OSError, ssl.SSLError):
+            pass
     if certificaat:
         try:
             context.load_verify_locations(certificaat)

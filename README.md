@@ -78,7 +78,10 @@ vanzelf in het schema terecht. De parts komen uit het schema; de footprint
 (voor de maat als PACKAGE_SIZE ontbreekt) uit het gekoppelde board. Die
 tabel levert de MDE-app via `GET https://everything.mde-automation.nl/mde/api/componenten`
 met de gedeelde sleutel in de header `X-Sleutel` (instelling
-`componenten_sleutel`, in te voeren via de knop Sleutel… in het venster).
+`componenten_sleutel`, in te voeren via de knop Sleutel… in het venster). Het
+https-certificaat van die server komt van de interne CA van MDE (Caddy); het
+rootcertificaat gaat mee als `resources/mde-root.crt`, zodat het niet in de
+Windows-certificaatwinkel van elke pc hoeft te staan.
 
 Per R en C leest de add-in de waardetekst (`100nF 16V X7R 10%`, `4k7 1/4W`)
 en de behuizingsmaat (attribuut `PACKAGE_SIZE`, anders uit de footprintnaam:
