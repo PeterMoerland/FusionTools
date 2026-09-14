@@ -135,8 +135,8 @@ def _toon_palet():
 
     palet = _ui.palettes.itemById(PALET_ID)
     if palet is None:
-        html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "standaard.html")
-        palet = _ui.palettes.add(PALET_ID, TITEL, html.replace("\\", "/"), False, True, True, 900, 520)
+        html = instellingen.palet_html("standaard.html")
+        palet = _ui.palettes.add(PALET_ID, TITEL, html, False, True, True, 900, 520)
         palet.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateFloating
         van_html = _VanHtml()
         palet.incomingFromHTML.add(van_html)
@@ -378,9 +378,8 @@ class _Toepassen(adsk.core.CustomEventHandler):
 
 def _voer_script_uit(regels):
     """Schrijft de ATTRIBUTE-regels naar een .scr en laat de PCB-editor hem draaien."""
-    map_ = os.path.join(os.path.dirname(instellingen.LOG), "scripts")
-    os.makedirs(map_, exist_ok=True)
-    pad = os.path.join(map_, "gpn.scr")
+    # Zonder spaties in het pad: Electron.runScript krijgt het pad als los argument.
+    pad = os.path.join(instellingen.werkmap("scripts"), "gpn.scr")
     with open(pad, "w", encoding="utf-8", newline="\n") as bestand:
         bestand.write("\n".join(regels) + "\n")
 

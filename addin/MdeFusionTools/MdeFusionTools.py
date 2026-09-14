@@ -373,10 +373,7 @@ def _maak_palet():
     if palet is not None:
         return palet
 
-    # De ingebouwde browser wil schuine strepen; met backslashes geeft hij
-    # ERR_INVALID_URL.
-    html = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "pcbuitvoer.html")
-    html = html.replace("\\", "/")
+    html = instellingen.palet_html("pcbuitvoer.html")
     palet = _ui.palettes.add(PALET_ID, TITEL, html, False, True, True, 420, 300)
     palet.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateFloating
     van_html = _VanHtml()
@@ -574,7 +571,8 @@ def _mfgexport(job):
     Geeft (pad van CAMOutputs, weggelaten output_types) terug, of (None, ...)
     na een melding aan de gebruiker.
     """
-    werkmap = os.path.join(os.path.dirname(instellingen.LOG), "cam-werk")
+    # Zonder spaties in het pad: het commando krijgt paden als losse argumenten.
+    werkmap = instellingen.werkmap("cam-werk")
     shutil.rmtree(werkmap, ignore_errors=True)
     job_kopie = os.path.join(werkmap, "job", os.path.basename(job))
     weggelaten = camjob.slank(job, job_kopie)
