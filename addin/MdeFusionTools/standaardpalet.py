@@ -328,6 +328,9 @@ class _VanHtml(adsk.core.HTMLEventHandler):
                 # via de gebeurtenis, net als de export.
                 _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps({"keuzes": gegevens.get("keuzes", [])}))
 
+            elif actie == "wissen":
+                _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps({"wissen": gegevens.get("namen", [])}))
+
             elif actie == "sluiten":
                 palet.isVisible = False
                 _app.fireCustomEvent(GEBEURTENIS_ID, json.dumps({"alleen_sluiten": True}))
@@ -350,11 +353,20 @@ class _Toepassen(adsk.core.CustomEventHandler):
                 return
 
             palet = _ui.palettes.itemById(PALET_ID)
-            keuzes = [(k.get("naam", ""), k.get("gpn", "")) for k in gegevens.get("keuzes", [])]
-            regels = standaard.script_regels(keuzes, _bladen if _is_schema(_board) else None)
+            bladen = _bladen if _is_schema(_board) else None
+            if "wissen" in gegevens:
+                namen = [n for n in gegevens.get("wissen", []) if n]
+                regels = standaard.wis_regels(namen, bladen)
+                aantal = len(namen)
+                wat = "GPN gewist"
+            else:
+                keuzes = [(k.get("naam", ""), k.get("gpn", "")) for k in gegevens.get("keuzes", [])]
+                regels = standaard.script_regels(keuzes, bladen)
+                aantal = sum(1 for naam, gpn in keuzes if naam and gpn)
+                wat = "GPN bijgewerkt"
             if not regels:
                 if palet:
-                    palet.sendInfoToHTML("melding", "Niets om bij te werken.")
+                    palet.sendInfoToHTML("melding", "Niets aangevinkt.")
                 return
 
             if _actief_ontwerp() is None:
@@ -362,14 +374,12 @@ class _Toepassen(adsk.core.CustomEventHandler):
                     palet.sendInfoToHTML("melding", "Het board of schema is niet meer actief.")
                 return
 
-            aantal = sum(1 for naam, gpn in keuzes if naam and gpn)
             antwoord = _voer_script_uit(regels)
-            instellingen.log(f"GPN bijgewerkt voor {aantal} onderdelen; antwoord: {antwoord!r}")
+            instellingen.log(f"{wat} voor {aantal} onderdelen; antwoord: {antwoord!r}")
 
-            # Opnieuw controleren: wat net een voorstel was, is nu standaard.
+            # Opnieuw controleren: wat net een voorstel was, is nu standaard (of andersom).
             if palet:
-                _stuur_stand(palet, f"GPN bijgewerkt voor {aantal} onderdelen. "
-                                    "Sla het board op om het te bewaren.")
+                _stuur_stand(palet, f"{wat} voor {aantal} onderdelen. Sla het schema op om het te bewaren.")
         except Exception:
             instellingen.log("GPN bijwerken mislukt:\n" + traceback.format_exc())
             _ui.messageBox("GPN bijwerken mislukt:\n\n" + traceback.format_exc()

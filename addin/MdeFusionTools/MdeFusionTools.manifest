@@ -6,7 +6,7 @@
     "description": {
         "": "PCB-uitvoer in een handeling: Gerber en drill via de CAM-processor, stuklijst en pick-and-place door de add-in, alles in een zip."
     },
-    "version": "1.1.2",
+    "version": "1.2.0",
     "runOnStartup": true,
     "supportedOS": "windows",
     "editEnabled": true

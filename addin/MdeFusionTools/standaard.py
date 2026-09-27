@@ -231,13 +231,15 @@ def _dielectrica(tekst):
     return {d.replace("NP0", "C0G") for d in delen if d}
 
 
-def kandidaten(soort, grootte, kenmerken, componenten):
+def kandidaten(soort, grootte, kenmerken, componenten, afgevallen=None):
     """De standaardcomponenten die bij soort, maat en waarde passen, beste eerst.
 
     De score telt hoeveel van de opgegeven kenmerken kloppen. Een hogere
-    spanning of een kleinere tolerantie dan gevraagd is goed; een lagere spanning
-    of ruimere tolerantie kost punten en krijgt een opmerking, zodat de gebruiker
-    het ziet voordat hij het GPN overneemt.
+    spanning of een kleinere tolerantie dan gevraagd is goed. Een lagere
+    spanning valt af (en komt in de lijst afgevallen, als die is meegegeven);
+    een ruimere tolerantie, ander dielectricum of lager vermogen kost punten en
+    krijgt een opmerking, zodat de gebruiker het ziet voordat hij het GPN
+    overneemt.
     """
     resultaat = []
     for c in componenten:
@@ -258,8 +260,11 @@ def kandidaten(soort, grootte, kenmerken, componenten):
             elif v >= kenmerken.spanning:
                 score += 2 if v == kenmerken.spanning else 1
             else:
-                score -= 2
-                opmerkingen.append(f"spanning {c.get('spanning')} lager dan {_kort(kenmerken.spanning)}V")
+                # Een lagere spanning dan het ontwerp vraagt is geen optie, ook
+                # niet als er verder niets past: 4.7nF 1000V wordt geen 50V.
+                if afgevallen is not None:
+                    afgevallen.append(f"{c.get('gpn')} ({c.get('spanning')} lager dan {_kort(kenmerken.spanning)}V)")
+                continue
 
         if kenmerken.dielectricum is not None:
             d = _dielectrica(c.get("dielectricum"))
@@ -335,11 +340,15 @@ def controleer(onderdelen, componenten):
             uitkomst.status = "onleesbaar"
             uitkomst.toelichting = "Behuizingsmaat niet te bepalen."
         else:
-            uitkomst.kandidaten = kandidaten(soort, grootte, kenmerken, componenten)
+            afgevallen = []
+            uitkomst.kandidaten = kandidaten(soort, grootte, kenmerken, componenten, afgevallen)
             if uitkomst.kandidaten:
                 uitkomst.status = "voorstel"
                 beste = uitkomst.kandidaten[0]
                 uitkomst.toelichting = "; ".join(beste.opmerkingen)
+            elif afgevallen:
+                uitkomst.toelichting = ("Alleen standaardcomponenten met een te lage spanning: "
+                                        + ", ".join(afgevallen) + ".")
             else:
                 uitkomst.toelichting = f"Geen standaardcomponent {soort} {grootte} met deze waarde."
         uitkomsten.append(uitkomst)
@@ -366,21 +375,33 @@ def script_regels(toewijzingen, bladen=None):
     geldig = [(naam, str(gpn).replace("'", "")) for naam, gpn in toewijzingen if naam and gpn]
     if not geldig:
         return []
+    # De weergave van een nieuw attribuut volgt de instelling CHANGE DISPLAY op
+    # dat moment; OFF vooraf houdt het GPN onzichtbaar in het schema. (Een
+    # weergave-optie achter ATTRIBUTE zelf accepteert Fusion niet.)
+    return _script([(naam, f"ATTRIBUTE {naam} GPN '{gpn}';") for naam, gpn in geldig], bladen,
+                   vooraf=["CHANGE DISPLAY OFF;"])
 
+
+def wis_regels(namen, bladen=None):
+    """EAGLE-scriptregels die het attribuut GPN van deze onderdelen verwijderen."""
+    geldig = [naam for naam in namen if naam]
+    if not geldig:
+        return []
+    return _script([(naam, f"ATTRIBUTE {naam} GPN DELETE;") for naam in geldig], bladen)
+
+
+def _script(per_naam, bladen, vooraf=()):
+    """Bouwt het script op: bevestigingen uit, eventueel extra regels vooraf,
+    dan de regels per blad (EDIT .S<n>), en terug naar het laagste blad."""
     bladen = bladen or {}
     per_blad = {}
-    for naam, gpn in geldig:
-        # Twee commando's per onderdeel: de waarde zetten, en de weergave uit.
-        # Een nieuw attribuut toont EAGLE anders standaard in het schema.
-        per_blad.setdefault(bladen.get(naam), []).extend([
-            f"ATTRIBUTE {naam} GPN '{gpn}';",
-            f"ATTRIBUTE {naam} GPN OFF;",
-        ])
+    for naam, regel in per_naam:
+        per_blad.setdefault(bladen.get(naam), []).append(regel)
 
     # Bestaat het attribuut al met een andere waarde, dan vraagt EAGLE per
     # onderdeel om bevestiging ("already exists, overwrite?"). In een script
     # beantwoordt SET CONFIRM YES die vraag; daarna weer uit.
-    regels = ["SET CONFIRM YES;"]
+    regels = ["SET CONFIRM YES;"] + list(vooraf)
     regels += per_blad.pop(None, [])
     genummerd = sorted(per_blad)
     for blad in genummerd:

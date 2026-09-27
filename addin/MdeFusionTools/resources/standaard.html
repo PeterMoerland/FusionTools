@@ -54,6 +54,7 @@
     <div class="rechts">
       <button type="button" onclick="stuur('sleutel')" title="De gedeelde sleutel voor de MDE-app invoeren">Sleutel…</button>
       <button type="button" onclick="stuur('vernieuwen')">Opnieuw controleren</button>
+      <button type="button" id="wissen" onclick="wissen()" disabled title="Het attribuut GPN verwijderen bij de aangevinkte onderdelen">GPN wissen</button>
       <button type="button" class="primair" id="toepassen" onclick="toepassen()" disabled>GPN bijwerken</button>
     </div>
   </div>
@@ -94,11 +95,34 @@
     telKnop();
   }
 
+  function aangevinkt() {
+    return Array.prototype.slice.call(document.querySelectorAll("tr[data-naam]")).filter(function (rij) {
+      var vink = rij.querySelector("input[type=checkbox]");
+      return vink && vink.checked;
+    });
+  }
+
   function telKnop() {
-    var n = document.querySelectorAll("tr[data-naam] input[type=checkbox]:checked").length;
+    var rijen = aangevinkt();
+    var bijwerken = rijen.filter(function (rij) { return rij.querySelector("select"); }).length;
+    var wissen = rijen.filter(function (rij) { return rij.dataset.gpn; }).length;
+
     var knop = document.getElementById("toepassen");
-    knop.disabled = n === 0;
-    knop.textContent = n ? "GPN bijwerken (" + n + ")" : "GPN bijwerken";
+    knop.disabled = bijwerken === 0;
+    knop.textContent = bijwerken ? "GPN bijwerken (" + bijwerken + ")" : "GPN bijwerken";
+
+    var wis = document.getElementById("wissen");
+    wis.disabled = wissen === 0;
+    wis.textContent = wissen ? "GPN wissen (" + wissen + ")" : "GPN wissen";
+  }
+
+  function wissen() {
+    var namen = aangevinkt().filter(function (rij) { return rij.dataset.gpn; })
+                            .map(function (rij) { return rij.dataset.naam; });
+    if (!namen.length) { melding("Geen aangevinkt onderdeel met een GPN."); return; }
+    document.getElementById("wissen").disabled = true;
+    melding("GPN wissen bij " + namen.length + " onderdelen…");
+    stuur("wissen", { namen: namen });
   }
 
   function toon(nieuw) {
@@ -113,10 +137,13 @@
       var rij = document.createElement("tr");
       rij.className = u.status;
       rij.dataset.naam = u.naam;
+      rij.dataset.gpn = u.gpn || "";
 
       var cel = document.createElement("td"); cel.className = "klein";
       var vink = document.createElement("input"); vink.type = "checkbox";
-      vink.disabled = u.status !== "voorstel";
+      // Aanvinkbaar als er iets mee te doen is: een voorstel overnemen, of een
+      // bestaand GPN wissen. Vooraf aangevinkt alleen bij een voorstel.
+      vink.disabled = !(u.status === "voorstel" || u.gpn);
       vink.checked = u.status === "voorstel";
       vink.onchange = telKnop;
       cel.appendChild(vink); rij.appendChild(cel);

@@ -94,11 +94,22 @@ class KandidatenTest(unittest.TestCase):
         self.assertEqual([c.gpn for c in lijst], ["GPC0402104", "GPC0402104H"])
         self.assertEqual(lijst[0].opmerkingen, [])
 
-    def test_lagere_spanning_krijgt_opmerking_en_zakt(self):
+    def test_lagere_spanning_valt_af(self):
         k = standaard.ontleed_waarde("C", "100nF 25V X7R 10%")
-        lijst = standaard.kandidaten("C", "0402", k, COMPONENTEN)
-        self.assertEqual(lijst[0].gpn, "GPC0402104H")
-        self.assertIn("spanning 16V lager dan 25V", lijst[1].opmerkingen)
+        afgevallen = []
+        lijst = standaard.kandidaten("C", "0402", k, COMPONENTEN, afgevallen)
+        self.assertEqual([c.gpn for c in lijst], ["GPC0402104H"])
+        self.assertEqual(afgevallen, ["GPC0402104 (16V lager dan 25V)"])
+
+    def test_alleen_te_lage_spanning_geeft_geen_voorstel(self):
+        # 4.7nF 1000V mag geen 50V-condensator worden, ook niet als dat de enige is.
+        tabel = [comp("GPC0603472", "C", "0603", 4.7e-9, "4.7 nF", tolerantie="10", spanning="50V",
+                      dielectricum="X7R")]
+        uitkomsten = standaard.controleer(
+            [standaard.Onderdeel("C1", "4.7nF 1000V X7R 10%", "CAPC1608X85", package_size="0603")], tabel)
+        self.assertEqual(uitkomsten[0].status, "geen")
+        self.assertEqual(uitkomsten[0].kandidaten, [])
+        self.assertIn("GPC0603472 (50V lager dan 1000V)", uitkomsten[0].toelichting)
 
     def test_andere_maat_of_waarde_past_niet(self):
         k = standaard.ontleed_waarde("C", "100nF")
@@ -203,9 +214,9 @@ class ScriptTest(unittest.TestCase):
 
     def test_attribute_regels(self):
         regels = standaard.script_regels([("R9", "GPR0402103"), ("C7", "GPC0402104"), ("", "X"), ("R1", "")])
-        self.assertEqual(regels, ["SET CONFIRM YES;",
-                                  "ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE R9 GPN OFF;",
-                                  "ATTRIBUTE C7 GPN 'GPC0402104';", "ATTRIBUTE C7 GPN OFF;",
+        self.assertEqual(regels, ["SET CONFIRM YES;", "CHANGE DISPLAY OFF;",
+                                  "ATTRIBUTE R9 GPN 'GPR0402103';",
+                                  "ATTRIBUTE C7 GPN 'GPC0402104';",
                                   "SET CONFIRM OFF;"])
         self.assertEqual(standaard.script_regels([("", "X")]), [])
 
@@ -215,20 +226,29 @@ class ScriptTest(unittest.TestCase):
             bladen={"R9": 2, "C7": 1, "R1": 2})
         self.assertEqual(regels, [
             "SET CONFIRM YES;",
-            "ATTRIBUTE X1 GPN 'GPX';", "ATTRIBUTE X1 GPN OFF;",
+            "CHANGE DISPLAY OFF;",
+            "ATTRIBUTE X1 GPN 'GPX';",
             "EDIT .S1;",
-            "ATTRIBUTE C7 GPN 'GPC0402104';", "ATTRIBUTE C7 GPN OFF;",
+            "ATTRIBUTE C7 GPN 'GPC0402104';",
             "EDIT .S2;",
-            "ATTRIBUTE R9 GPN 'GPR0402103';", "ATTRIBUTE R9 GPN OFF;",
-            "ATTRIBUTE R1 GPN 'GPR0402232';", "ATTRIBUTE R1 GPN OFF;",
+            "ATTRIBUTE R9 GPN 'GPR0402103';",
+            "ATTRIBUTE R1 GPN 'GPR0402232';",
             "EDIT .S1;",
             "SET CONFIRM OFF;",
         ])
 
     def test_een_blad_geen_terugkeer_nodig(self):
         regels = standaard.script_regels([("R9", "GPR0402103")], bladen={"R9": 3})
-        self.assertEqual(regels, ["SET CONFIRM YES;", "EDIT .S3;", "ATTRIBUTE R9 GPN 'GPR0402103';",
-                                  "ATTRIBUTE R9 GPN OFF;", "SET CONFIRM OFF;"])
+        self.assertEqual(regels, ["SET CONFIRM YES;", "CHANGE DISPLAY OFF;", "EDIT .S3;",
+                                  "ATTRIBUTE R9 GPN 'GPR0402103';", "SET CONFIRM OFF;"])
+
+    def test_wissen(self):
+        regels = standaard.wis_regels(["R9", "", "C7"], bladen={"R9": 2, "C7": 1})
+        self.assertEqual(regels, ["SET CONFIRM YES;",
+                                  "EDIT .S1;", "ATTRIBUTE C7 GPN DELETE;",
+                                  "EDIT .S2;", "ATTRIBUTE R9 GPN DELETE;",
+                                  "EDIT .S1;", "SET CONFIRM OFF;"])
+        self.assertEqual(standaard.wis_regels([]), [])
 
 
 if __name__ == "__main__":

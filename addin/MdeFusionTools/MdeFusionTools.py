@@ -58,6 +58,7 @@ _ui = None
 # de knop niets meer.
 _handlers = []
 _geactiveerd = None   # de workspaceActivated-handler, om hem bij stoppen los te koppelen
+_document_geactiveerd = None   # idem voor documentActivated
 
 
 def run(context):
@@ -105,10 +106,13 @@ def run(context):
         except Exception:
             # Dan pas bij het activeren van het schema; de rest moet gewoon starten.
             instellingen.log("Schema-werkruimte zoeken mislukt:\n" + traceback.format_exc())
-        global _geactiveerd
+        global _geactiveerd, _document_geactiveerd
         _geactiveerd = _WerkruimteGeactiveerd()
         _ui.workspaceActivated.add(_geactiveerd)
         _handlers.append(_geactiveerd)
+        _document_geactiveerd = _DocumentGeactiveerd()
+        _app.documentActivated.add(_document_geactiveerd)
+        _handlers.append(_document_geactiveerd)
     except Exception:
         instellingen.log("Starten mislukt:\n" + traceback.format_exc())
         if _ui:
@@ -142,13 +146,19 @@ def stop(context):
 
         standaardpalet.stop()
 
-        global _geactiveerd
+        global _geactiveerd, _document_geactiveerd
         if _geactiveerd is not None:
             try:
                 _ui.workspaceActivated.remove(_geactiveerd)
             except Exception:
                 pass
             _geactiveerd = None
+        if _document_geactiveerd is not None:
+            try:
+                _app.documentActivated.remove(_document_geactiveerd)
+            except Exception:
+                pass
+            _document_geactiveerd = None
 
         try:
             _app.unregisterCustomEvent(GEBEURTENIS_ID)
@@ -292,8 +302,41 @@ class _WerkruimteGeactiveerd(adsk.core.WorkspaceEventHandler):
             kenmerk = f"{ws.id} {ws.name} {ws.productType}"
             if SCHEMA_KENMERK.search(kenmerk) and "pcb" not in kenmerk.lower() and "board" not in kenmerk.lower():
                 _plaats_in_schema_werkruimte(ws)
+            _maak_knoppen_actief()
         except Exception:
             instellingen.log("workspaceActivated mislukt:\n" + traceback.format_exc())
+
+
+class _DocumentGeactiveerd(adsk.core.DocumentEventHandler):
+    """Bij een wissel van document de knoppen weer bruikbaar maken."""
+
+    def notify(self, args):
+        try:
+            _maak_knoppen_actief()
+        except Exception:
+            instellingen.log("documentActivated mislukt:\n" + traceback.format_exc())
+
+
+def _maak_knoppen_actief():
+    """Zet de knoppen van de add-in op enabled als Fusion ze heeft uitgeschakeld.
+
+    Fusion zet een knop soms op disabled na een wissel van document of
+    werkruimte; tot nu toe hielp alleen de add-in uit- en aanzetten. Bij elke
+    activering zetten we ze daarom terug.
+    """
+    for knop_id in (COMMANDO_ID, standaardpalet.COMMANDO_ID):
+        try:
+            definitie = _ui.commandDefinitions.itemById(knop_id)
+            if definitie is None:
+                continue
+            besturing = definitie.controlDefinition
+            if not besturing.isEnabled:
+                instellingen.log(f"Knop {knop_id} stond op disabled; weer ingeschakeld.")
+                besturing.isEnabled = True
+            if not besturing.isVisible:
+                besturing.isVisible = True
+        except Exception as ex:
+            instellingen.log(f"Knop {knop_id} inschakelen mislukt: {type(ex).__name__}: {ex}")
 
 
 def _pcb_werkruimte():
