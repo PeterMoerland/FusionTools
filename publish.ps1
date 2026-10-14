@@ -91,13 +91,34 @@ Copy-Item -Path (Join-Path $projectRoot 'Installeer.cmd') -Destination $uitgave 
 # share verwijderen en meteen opnieuw aanmaken liet op de NAS een map achter die
 # voor niemand meer toegankelijk was ("Toegang geweigerd", ook voor rd).
 $huidig = Join-Path $Doel $VasteMap
+#
+# Ook mappen binnen de vaste map worden niet verwijderd: een map op de NAS
+# verwijderen en meteen opnieuw aanmaken geeft een paar seconden "Toegang
+# geweigerd" (de verwijdering is dan nog bezig). Bestanden worden overschreven,
+# en bestanden die in de nieuwe uitgave niet meer bestaan gaan een voor een weg.
 try {
-    if (Test-Path $huidig) {
-        Get-ChildItem $huidig -Force | Remove-Item -Recurse -Force
-    } else {
+    if (-not (Test-Path $huidig)) {
         New-Item -ItemType Directory -Path $huidig -Force | Out-Null
     }
-    Copy-Item -Path (Join-Path $uitgave '*') -Destination $huidig -Recurse -Force
+
+    $nieuw = Get-ChildItem $uitgave -Recurse -File | ForEach-Object { $_.FullName.Substring($uitgave.Length) }
+    Get-ChildItem $huidig -Recurse -File -Force | ForEach-Object {
+        $relatief = $_.FullName.Substring($huidig.Length)
+        if ($nieuw -notcontains $relatief) { Remove-Item $_.FullName -Force }
+    }
+
+    # Kopieren met een paar herkansingen, voor het geval de NAS nog even nawerkt.
+    $poging = 0
+    while ($true) {
+        try {
+            Copy-Item -Path (Join-Path $uitgave '*') -Destination $huidig -Recurse -Force -ErrorAction Stop
+            break
+        } catch {
+            $poging++
+            if ($poging -ge 5) { throw }
+            Start-Sleep -Seconds 3
+        }
+    }
 } catch {
     Write-Host ""
     Write-Host "De uitgave staat klaar in $uitgave, maar '$VasteMap' kon niet worden bijgewerkt:" -ForegroundColor Yellow
