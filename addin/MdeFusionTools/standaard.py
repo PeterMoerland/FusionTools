@@ -124,7 +124,13 @@ def ontleed_waarde(soort, tekst):
     (1/16W, 0.25W). Wat niet te lezen is, blijft None.
     """
     k = Kenmerken()
-    termen = (tekst or "").replace("Ω", "R").replace("ohm", "R").replace("Ohm", "R").split()
+    tekst = (tekst or "").replace("Ω", "R").replace("ohm", "R").replace("Ohm", "R")
+    # Schrijfwijzen als "100nF/50V(10%)" of "47nF/10V MLCC": de schuine streep en
+    # haakjes scheiden de kenmerken. Alleen een breuk als vermogen (1/16W) houdt
+    # zijn streep; die wordt tijdelijk vervangen.
+    tekst = re.sub(r"(\d+)\s*/\s*(\d+)(\s*[wW]\b)", r"\1÷\2\3", tekst)
+    tekst = re.sub(r"[/();,]", " ", tekst).replace("÷", "/")
+    termen = tekst.split()
     if not termen:
         return k
 

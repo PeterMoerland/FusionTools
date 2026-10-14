@@ -72,6 +72,27 @@ class OntleedTest(unittest.TestCase):
             with self.subTest(tekst=tekst):
                 self.assertAlmostEqual(standaard.ontleed_waarde("C", tekst).basis, verwacht, delta=verwacht * 1e-9)
 
+    def test_schuine_streep_en_haakjes_als_scheiding(self):
+        # Schrijfwijzen van het Stepperboard: capaciteit/spanning(tolerantie) en "MLCC" erachter.
+        gevallen = {
+            "100uF/63V": (100e-6, 63, None),
+            "100nF/50V(10%)": (1e-7, 50, 10),
+            "1uF/16V": (1e-6, 16, None),
+            "47nF/10V MLCC": (47e-9, 10, None),
+            "100nF/100V/1206": (1e-7, 100, None),
+            "22uF/10V(20%)": (22e-6, 10, 20),
+            "0.01uF": (1e-8, None, None),
+        }
+        for tekst, (basis, spanning, tolerantie) in gevallen.items():
+            with self.subTest(tekst=tekst):
+                k = standaard.ontleed_waarde("C", tekst)
+                self.assertAlmostEqual(k.basis, basis, delta=basis * 1e-9)
+                self.assertEqual((k.spanning, k.tolerantie), (spanning, tolerantie))
+
+        # De breuk van een vermogen blijft een breuk.
+        k = standaard.ontleed_waarde("R", "10k/1%/1/16W")
+        self.assertEqual((k.basis, k.tolerantie, k.vermogen), (10000, 1, 0.0625))
+
     def test_kenmerken(self):
         k = standaard.ontleed_waarde("C", "100nF 6.3v X7R 10%")
         self.assertEqual((k.spanning, k.dielectricum, k.tolerantie), (6.3, "X7R", 10))
