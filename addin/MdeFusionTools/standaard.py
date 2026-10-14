@@ -129,7 +129,8 @@ def ontleed_waarde(soort, tekst):
     # haakjes scheiden de kenmerken. Alleen een breuk als vermogen (1/16W) houdt
     # zijn streep; die wordt tijdelijk vervangen.
     tekst = re.sub(r"(\d+)\s*/\s*(\d+)(\s*[wW]\b)", r"\1÷\2\3", tekst)
-    tekst = re.sub(r"[/();,]", " ", tekst).replace("÷", "/")
+    # Geen komma: die is in "4,7k" een decimaalteken.
+    tekst = re.sub(r"[/();]", " ", tekst).replace("÷", "/")
     termen = tekst.split()
     if not termen:
         return k
