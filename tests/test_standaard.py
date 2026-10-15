@@ -130,7 +130,7 @@ class KandidatenTest(unittest.TestCase):
             [standaard.Onderdeel("C1", "4.7nF 1000V X7R 10%", "CAPC1608X85", package_size="0603")], tabel)
         self.assertEqual(uitkomsten[0].status, "geen")
         self.assertEqual(uitkomsten[0].kandidaten, [])
-        self.assertIn("GPC0603472 (50V lager dan 1000V)", uitkomsten[0].toelichting)
+        self.assertIn("te lage spanning", uitkomsten[0].toelichting)
 
     def test_andere_maat_of_waarde_past_niet(self):
         k = standaard.ontleed_waarde("C", "100nF")
@@ -176,7 +176,7 @@ class TabelFormatenTest(unittest.TestCase):
 
     def test_dielectricum_als_lijst_en_np0_is_c0g(self):
         tabel = [comp("GPC0402220", "C", "0402", 22e-12, "22 pF", tolerantie="5", spanning="50V", dielectricum="C0G, NP0"),
-                 comp("GPC0402220X", "C", "0402", 22e-12, "22 pF", tolerantie="10", spanning="50V", dielectricum="X7R")]
+                 comp("GPC0402220X", "C", "0402", 22e-12, "22 pF", tolerantie="5", spanning="50V", dielectricum="X7R")]
         k = standaard.ontleed_waarde("C", "22pF 50V NP0 5%")
         lijst = standaard.kandidaten("C", "0402", k, tabel)
         self.assertEqual(lijst[0].gpn, "GPC0402220")
@@ -262,6 +262,47 @@ class ScriptTest(unittest.TestCase):
         regels = standaard.script_regels([("R9", "GPR0402103")], bladen={"R9": 3})
         self.assertEqual(regels, ["SET CONFIRM YES;", "CHANGE DISPLAY OFF;", "EDIT .S3;",
                                   "ATTRIBUTE R9 GPN 'GPR0402103';", "SET CONFIRM OFF;"])
+
+    def test_parts_in_modules_na_het_hoofdschema(self):
+        Plek = standaard.Plek
+        bladen = {
+            "C3": Plek("C3", 1),
+            "STEP:C3": Plek("C3", 1, "STEP"),
+            "STEP:C5": Plek("C5", 2, "STEP"),
+            "DRV:R1": Plek("R1", None, "DRV"),
+        }
+        regels = standaard.script_regels(
+            [("STEP:C3", "GPC0402103"), ("C3", "GPC0402104"), ("DRV:R1", "GPR0402103"), ("STEP:C5", "GPC0402105")],
+            bladen)
+        self.assertEqual(regels, [
+            "SET CONFIRM YES;",
+            "CHANGE DISPLAY OFF;",
+            "EDIT .S1;",
+            "ATTRIBUTE C3 GPN 'GPC0402104';",
+            "EDIT DRV.mod;",
+            "ATTRIBUTE R1 GPN 'GPR0402103';",
+            "EDIT STEP.mod;",
+            "EDIT .S1;",
+            "ATTRIBUTE C3 GPN 'GPC0402103';",
+            "EDIT .S2;",
+            "ATTRIBUTE C5 GPN 'GPC0402105';",
+            "SET CONFIRM OFF;",
+        ])
+        # Zonder plek: de naam na de dubbele punt op het blad dat open staat.
+        self.assertEqual(standaard.wis_regels(["STEP:C3"]),
+                         ["SET CONFIRM YES;", "ATTRIBUTE C3 GPN DELETE;", "SET CONFIRM OFF;"])
+
+    def test_sleutel_van_een_uitkomst(self):
+        u = standaard.Uitkomst("C3", "C", "100nF", "0402", "", "geen", module="STEP")
+        self.assertEqual(u.sleutel, "STEP:C3")
+        self.assertEqual(standaard.Uitkomst("C3", "C", "100nF", "0402", "", "geen").sleutel, "C3")
+
+    def test_ruimere_tolerantie_valt_af(self):
+        tabel = [comp("GPC0402104", "C", "0402", 1e-07, "100 nF", tolerantie="20", spanning="50V", dielectricum="X7R")]
+        uitkomsten = standaard.controleer(
+            [standaard.Onderdeel("C1", "100nF/50V(10%)", "CAPC1005X60", package_size="0402")], tabel)
+        self.assertEqual(uitkomsten[0].status, "geen")
+        self.assertIn("ruimere tolerantie", uitkomsten[0].toelichting)
 
     def test_wissen(self):
         regels = standaard.wis_regels(["R9", "", "C7"], bladen={"R9": 2, "C7": 1})

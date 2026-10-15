@@ -79,7 +79,7 @@
       var vink = rij.querySelector("input[type=checkbox]");
       var lijst = rij.querySelector("select");
       if (vink && vink.checked && lijst && lijst.value) {
-        keuzes.push({ naam: rij.dataset.naam, gpn: lijst.value });
+        keuzes.push({ naam: rij.dataset.naam, sleutel: rij.dataset.sleutel, gpn: lijst.value });
       }
     });
     if (!keuzes.length) { melding("Niets aangevinkt."); return; }
@@ -118,7 +118,7 @@
 
   function wissen() {
     var namen = aangevinkt().filter(function (rij) { return rij.dataset.gpn; })
-                            .map(function (rij) { return rij.dataset.naam; });
+                            .map(function (rij) { return rij.dataset.sleutel; });
     if (!namen.length) { melding("Geen aangevinkt onderdeel met een GPN."); return; }
     document.getElementById("wissen").disabled = true;
     melding("GPN wissen bij " + namen.length + " onderdelen…");
@@ -137,6 +137,7 @@
       var rij = document.createElement("tr");
       rij.className = u.status;
       rij.dataset.naam = u.naam;
+      rij.dataset.sleutel = u.sleutel || u.naam;
       rij.dataset.gpn = u.gpn || "";
 
       var cel = document.createElement("td"); cel.className = "klein";
@@ -148,7 +149,12 @@
       vink.onchange = telKnop;
       cel.appendChild(vink); rij.appendChild(cel);
 
-      cel = document.createElement("td"); cel.className = "klein"; cel.textContent = u.naam; rij.appendChild(cel);
+      cel = document.createElement("td"); cel.className = "klein"; cel.textContent = u.naam;
+      if (u.module) {
+        var mod = document.createElement("div"); mod.className = "opm"; mod.style.color = "#555";
+        mod.textContent = "module " + u.module; cel.appendChild(mod);
+      }
+      rij.appendChild(cel);
       cel = document.createElement("td"); cel.textContent = u.waarde; rij.appendChild(cel);
       cel = document.createElement("td"); cel.className = "klein"; cel.textContent = u.grootte || "?"; rij.appendChild(cel);
       cel = document.createElement("td"); cel.className = "huidig"; cel.textContent = u.mpn || ""; rij.appendChild(cel);

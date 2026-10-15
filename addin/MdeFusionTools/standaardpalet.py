@@ -193,10 +193,14 @@ def _onderdelen_schema(schema):
     except Exception:
         instellingen.log("Gekoppeld board niet leesbaar:\n" + traceback.format_exc())
 
-    # Op welk blad elk part staat: ATTRIBUTE werkt alleen op het actieve blad,
-    # dus het script moet per blad wisselen.
+    # Waar elk part staat: ATTRIBUTE werkt alleen op het actieve blad, dus het
+    # script moet per blad wisselen; en een part in een module heet lokaal (C3)
+    # en bestaat op het hoofdblad niet onder die naam ("Invalid part or gate
+    # name"). Daarom per module de parts en hun bladen apart.
     global _bladen
     _bladen = {}
+    module_van = {}   # id(part) -> modulenaam, voor de parts die uit een module komen
+    module_parts = []
     try:
         bladen = schema.sheets
         for i in range(bladen.count):
@@ -204,17 +208,54 @@ def _onderdelen_schema(schema):
             nummer = blad.number
             delen = blad.parts
             for j in range(delen.count):
-                _bladen.setdefault(delen.item(j).name, nummer)
-        instellingen.log(f"Schema: {bladen.count} bladen, {len(_bladen)} parts met een blad.")
+                _bladen.setdefault(delen.item(j).name, standaard.Plek(delen.item(j).name, nummer))
+        instellingen.log(f"Schema: {bladen.count} bladen, {len(_bladen)} parts op het hoofdschema.")
     except Exception:
         instellingen.log("Bladen van het schema niet leesbaar:\n" + traceback.format_exc())
+    try:
+        modules = schema.modules
+        for i in range(modules.count):
+            module = modules.item(i)
+            modulenaam = module.name or ""
+            per_blad = {}
+            try:
+                mbladen = module.sheets
+                for j in range(mbladen.count):
+                    mblad = mbladen.item(j)
+                    delen = mblad.parts
+                    for k in range(delen.count):
+                        per_blad.setdefault(delen.item(k).name, mblad.number)
+            except Exception:
+                instellingen.log(f"Bladen van module {modulenaam} niet leesbaar:\n" + traceback.format_exc())
+            delen = module.parts
+            for j in range(delen.count):
+                part = delen.item(j)
+                naam = part.name or ""
+                _bladen[f"{modulenaam}:{naam}"] = standaard.Plek(naam, per_blad.get(naam), modulenaam)
+                module_parts.append((part, modulenaam))
+        instellingen.log(f"Schema: {modules.count} modules, {len(module_parts)} parts daarin.")
+    except Exception:
+        instellingen.log("Modules van het schema niet leesbaar:\n" + traceback.format_exc())
 
-    resultaat = []
+    # De parts van het hoofdschema zijn die van schema.parts die op een hoofdblad
+    # staan; wat daar niet op staat en wel in een module zit, hoort bij de module.
+    hoofdnamen = {sleutel for sleutel, plek in _bladen.items() if not plek.module}
+    te_lezen = []
     parts = schema.parts
     aantal = parts.count
-    instellingen.log(f"Schema: {aantal} parts lezen.")
     for i in range(aantal):
         part = parts.item(i)
+        try:
+            naam = part.name or ""
+        except Exception:
+            continue
+        if naam in hoofdnamen or not module_parts:
+            te_lezen.append((part, ""))
+    te_lezen += module_parts
+    instellingen.log(f"Schema: {aantal} parts in totaal, {len(te_lezen)} te lezen.")
+
+    resultaat = []
+    for i, (part, modulenaam) in enumerate(te_lezen):
         naam = ""
         try:
             naam = part.name or ""
@@ -239,7 +280,8 @@ def _onderdelen_schema(schema):
             mpn=attributen.get("MPN", "") or "",
             gpn=attributen.get("GPN", "") or "",
             package_size=attributen.get("PACKAGE_SIZE", "") or "",
-            populate=True))
+            populate=True,
+            module=modulenaam))
     instellingen.log(f"Schema: {len(resultaat)} parts gelezen.")
     return resultaat
 
@@ -277,6 +319,8 @@ def _stand(melding="", fout=False):
     stand["aantal_componenten"] = len(tabel)
     stand["uitkomsten"] = [{
         "naam": u.naam,
+        "sleutel": u.sleutel,
+        "module": u.module,
         "soort": u.soort,
         "waarde": u.waarde,
         "grootte": u.grootte,
@@ -354,15 +398,17 @@ class _Toepassen(adsk.core.CustomEventHandler):
 
             palet = _ui.palettes.itemById(PALET_ID)
             bladen = _bladen if _is_schema(_board) else None
+            # De pagina stuurt de sleutel (module:naam voor een part in een module).
             if "wissen" in gegevens:
-                namen = [n for n in gegevens.get("wissen", []) if n]
-                regels = standaard.wis_regels(namen, bladen)
-                aantal = len(namen)
+                sleutels = [s for s in gegevens.get("wissen", []) if s]
+                regels = standaard.wis_regels(sleutels, bladen)
+                aantal = len(sleutels)
                 wat = "GPN gewist"
             else:
-                keuzes = [(k.get("naam", ""), k.get("gpn", "")) for k in gegevens.get("keuzes", [])]
+                keuzes = [(k.get("sleutel") or k.get("naam", ""), k.get("gpn", ""))
+                          for k in gegevens.get("keuzes", [])]
                 regels = standaard.script_regels(keuzes, bladen)
-                aantal = sum(1 for naam, gpn in keuzes if naam and gpn)
+                aantal = sum(1 for sleutel, gpn in keuzes if sleutel and gpn)
                 wat = "GPN bijgewerkt"
             if not regels:
                 if palet:

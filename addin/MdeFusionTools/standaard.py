@@ -44,6 +44,7 @@ class Onderdeel:
     gpn: str = ""
     package_size: str = ""
     populate: bool = True
+    module: str = ""      # naam van de module als het part in een module van het schema zit
 
 
 @dataclass
@@ -76,6 +77,13 @@ class Uitkomst:
     kandidaten: list = field(default_factory=list)
     toelichting: str = ""
     gpn: str = ""
+    module: str = ""
+
+    @property
+    def sleutel(self):
+        """Unieke naam in het schema: binnen een module heet een part lokaal (C3),
+        en dezelfde naam kan op het hoofdblad en in andere modules voorkomen."""
+        return f"{self.module}:{self.naam}" if self.module else self.naam
 
     @property
     def voorstel(self):
@@ -243,9 +251,9 @@ def kandidaten(soort, grootte, kenmerken, componenten, afgevallen=None):
 
     De score telt hoeveel van de opgegeven kenmerken kloppen. Een hogere
     spanning of een kleinere tolerantie dan gevraagd is goed. Een lagere
-    spanning valt af (en komt in de lijst afgevallen, als die is meegegeven);
-    een ruimere tolerantie, ander dielectricum of lager vermogen kost punten en
-    krijgt een opmerking, zodat de gebruiker het ziet voordat hij het GPN
+    spanning of een ruimere tolerantie valt af (en komt in de lijst afgevallen,
+    als die is meegegeven); een ander dielectricum of lager vermogen kost punten
+    en krijgt een opmerking, zodat de gebruiker het ziet voordat hij het GPN
     overneemt.
     """
     resultaat = []
@@ -288,8 +296,11 @@ def kandidaten(soort, grootte, kenmerken, componenten, afgevallen=None):
             elif t <= kenmerken.tolerantie:
                 score += 2 if t == kenmerken.tolerantie else 1
             else:
-                score -= 2
-                opmerkingen.append(f"tolerantie {_kort(t)}% ruimer dan {_kort(kenmerken.tolerantie)}%")
+                # Een ruimere tolerantie dan gevraagd valt af, net als een lagere spanning.
+                if afgevallen is not None:
+                    afgevallen.append(f"{c.get('gpn')} (tolerantie {_kort(t)}% ruimer dan "
+                                      f"{_kort(kenmerken.tolerantie)}%)")
+                continue
 
         if kenmerken.vermogen is not None:
             w = _watt(c.get("vermogen"))
@@ -331,7 +342,7 @@ def controleer(onderdelen, componenten):
         mpn = (o.mpn or "").strip()
         gpn = (o.gpn or "").strip()
         uitkomst = Uitkomst(naam=o.naam, soort=soort, waarde=o.waarde or "", grootte=grootte,
-                            mpn=mpn, status="geen", gpn=gpn)
+                            mpn=mpn, status="geen", gpn=gpn, module=o.module or "")
 
         if gpn.upper() in gpns:
             uitkomst.status = "standaard"
@@ -354,8 +365,10 @@ def controleer(onderdelen, componenten):
                 beste = uitkomst.kandidaten[0]
                 uitkomst.toelichting = "; ".join(beste.opmerkingen)
             elif afgevallen:
-                uitkomst.toelichting = ("Alleen standaardcomponenten met een te lage spanning: "
-                                        + ", ".join(afgevallen) + ".")
+                # Wel deze waarde in de tabel, maar met een te lage spanning of een
+                # ruimere tolerantie; die tellen niet (besluit gebruiker).
+                uitkomst.toelichting = (f"Geen passend standaardcomponent {soort} {grootte}: "
+                                        "wel met deze waarde, maar met te lage spanning of ruimere tolerantie.")
             else:
                 uitkomst.toelichting = f"Geen standaardcomponent {soort} {grootte} met deze waarde."
         uitkomsten.append(uitkomst)
@@ -379,42 +392,82 @@ def script_regels(toewijzingen, bladen=None):
     EDIT .S<n> en eindigt het op het laagste blad dat het aanraakte. Onderdelen
     zonder bekend blad komen als eerste, op het blad dat open staat.
     """
-    geldig = [(naam, str(gpn).replace("'", "")) for naam, gpn in toewijzingen if naam and gpn]
+    geldig = [(sleutel, str(gpn).replace("'", "")) for sleutel, gpn in toewijzingen if sleutel and gpn]
     if not geldig:
         return []
     # De weergave van een nieuw attribuut volgt de instelling CHANGE DISPLAY op
     # dat moment; OFF vooraf houdt het GPN onzichtbaar in het schema. (Een
     # weergave-optie achter ATTRIBUTE zelf accepteert Fusion niet.)
-    return _script([(naam, f"ATTRIBUTE {naam} GPN '{gpn}';") for naam, gpn in geldig], bladen,
+    return _script([(sleutel, "ATTRIBUTE {naam} GPN '" + gpn + "';") for sleutel, gpn in geldig], bladen,
                    vooraf=["CHANGE DISPLAY OFF;"])
 
 
-def wis_regels(namen, bladen=None):
+def wis_regels(sleutels, bladen=None):
     """EAGLE-scriptregels die het attribuut GPN van deze onderdelen verwijderen."""
-    geldig = [naam for naam in namen if naam]
+    geldig = [s for s in sleutels if s]
     if not geldig:
         return []
-    return _script([(naam, f"ATTRIBUTE {naam} GPN DELETE;") for naam in geldig], bladen)
+    return _script([(s, "ATTRIBUTE {naam} GPN DELETE;") for s in geldig], bladen)
 
 
-def _script(per_naam, bladen, vooraf=()):
-    """Bouwt het script op: bevestigingen uit, eventueel extra regels vooraf,
-    dan de regels per blad (EDIT .S<n>), en terug naar het laagste blad."""
+@dataclass
+class Plek:
+    """Waar een part in het schema staat: op een blad van het hoofdschema, of op
+    een blad van een module. Binnen een module heet een part lokaal (C3)."""
+    naam: str
+    blad: int = None
+    module: str = ""
+
+
+def _plek(sleutel, bladen):
+    waarde = bladen.get(sleutel)
+    if isinstance(waarde, Plek):
+        return waarde
+    if isinstance(waarde, int):
+        return Plek(naam=sleutel, blad=waarde)
+    naam = sleutel.split(":", 1)[1] if ":" in sleutel else sleutel
+    return Plek(naam=naam)
+
+
+def _script(per_sleutel, bladen, vooraf=()):
+    """Bouwt het script op: bevestigingen uit, eventueel extra regels vooraf, de
+    regels van het hoofdschema per blad (EDIT .S<n>), terug naar het laagste
+    blad, en daarna per module (EDIT <module>.mod, dan per blad).
+
+    De modules komen als laatste: het hoofdschema is dan al bijgewerkt als het
+    openen van een module in Fusion toch niet lukt. Terug naar het hoofdschema
+    kan het script niet; daar staat geen betrouwbaar commando voor.
+    """
     bladen = bladen or {}
-    per_blad = {}
-    for naam, regel in per_naam:
-        per_blad.setdefault(bladen.get(naam), []).append(regel)
+    hoofd = {}
+    modules = {}
+    for sleutel, sjabloon in per_sleutel:
+        plek = _plek(sleutel, bladen)
+        regel = sjabloon.format(naam=plek.naam)
+        if plek.module:
+            modules.setdefault(plek.module, {}).setdefault(plek.blad, []).append(regel)
+        else:
+            hoofd.setdefault(plek.blad, []).append(regel)
 
     # Bestaat het attribuut al met een andere waarde, dan vraagt EAGLE per
     # onderdeel om bevestiging ("already exists, overwrite?"). In een script
     # beantwoordt SET CONFIRM YES die vraag; daarna weer uit.
     regels = ["SET CONFIRM YES;"] + list(vooraf)
-    regels += per_blad.pop(None, [])
-    genummerd = sorted(per_blad)
+    regels += hoofd.pop(None, [])
+    genummerd = sorted(hoofd)
     for blad in genummerd:
         regels.append(f"EDIT .S{blad};")
-        regels += per_blad[blad]
+        regels += hoofd[blad]
     if len(genummerd) > 1:
         regels.append(f"EDIT .S{genummerd[0]};")
+
+    for module in sorted(modules):
+        regels.append(f"EDIT {module}.mod;")
+        per_blad = modules[module]
+        regels += per_blad.pop(None, [])
+        for blad in sorted(per_blad):
+            regels.append(f"EDIT .S{blad};")
+            regels += per_blad[blad]
+
     regels.append("SET CONFIRM OFF;")
     return regels
