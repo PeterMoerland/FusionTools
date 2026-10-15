@@ -344,13 +344,34 @@ def controleer(onderdelen, componenten):
         uitkomst = Uitkomst(naam=o.naam, soort=soort, waarde=o.waarde or "", grootte=grootte,
                             mpn=mpn, status="geen", gpn=gpn, module=o.module or "")
 
+        kenmerken = ontleed_waarde(soort, o.waarde)
+
         if gpn.upper() in gpns:
-            uitkomst.status = "standaard"
-            uitkomst.toelichting = "GPN is al een standaardcomponent."
+            # Al een GPN; maar past die wel bij deze waarde en maat? Een verkeerd
+            # GPN (bijvoorbeeld van een gelijknamig part uit een module) moet
+            # opvallen en te vervangen zijn.
+            huidig = next((c for c in componenten if str(c.get("gpn", "")).upper() == gpn.upper()), None)
+            past = (huidig is not None and kenmerken.basis is not None and grootte
+                    and str(huidig.get("soort", "")).upper() == soort
+                    and str(huidig.get("grootte", "")) == grootte
+                    and _gelijk(kenmerken.basis, huidig.get("waardeBasis")))
+            if past or kenmerken.basis is None or not grootte:
+                uitkomst.status = "standaard"
+                uitkomst.toelichting = "GPN is al een standaardcomponent."
+                uitkomsten.append(uitkomst)
+                continue
+            afgevallen = []
+            uitkomst.kandidaten = kandidaten(soort, grootte, kenmerken, componenten, afgevallen)
+            omschrijving = str(huidig.get("omschrijving") or huidig.get("waardeTekst") or "") if huidig else ""
+            if uitkomst.kandidaten:
+                uitkomst.status = "voorstel"
+                uitkomst.toelichting = f"Huidige GPN {gpn} past niet bij deze waarde ({omschrijving})."
+            else:
+                uitkomst.toelichting = (f"Huidige GPN {gpn} past niet bij deze waarde ({omschrijving}); "
+                                        "geen passend standaardcomponent. Wissen.")
             uitkomsten.append(uitkomst)
             continue
 
-        kenmerken = ontleed_waarde(soort, o.waarde)
         if kenmerken.basis is None:
             uitkomst.status = "onleesbaar"
             uitkomst.toelichting = "Waarde niet te lezen."
@@ -461,13 +482,20 @@ def _script(per_sleutel, bladen, vooraf=()):
     if len(genummerd) > 1:
         regels.append(f"EDIT .S{genummerd[0]};")
 
+    # Bladen van een module heten .m<n>, niet .s<n>: EDIT .s1 na EDIT naam.mod
+    # springt terug naar blad 1 van het hoofdschema, en dan komen de ATTRIBUTE-
+    # regels op de gelijknamige parts van het hoofdschema terecht.
     for module in sorted(modules):
-        regels.append(f"EDIT {module}.mod;")
         per_blad = modules[module]
-        regels += per_blad.pop(None, [])
+        if None in per_blad:
+            regels.append(f"EDIT {module}.mod;")
+            regels += per_blad.pop(None)
         for blad in sorted(per_blad):
-            regels.append(f"EDIT .S{blad};")
+            regels.append(f"EDIT {module}.m{blad};")
             regels += per_blad[blad]
+    if modules:
+        # Terug naar het hoofdschema.
+        regels.append(f"EDIT .S{genummerd[0] if genummerd else 1};")
 
     regels.append("SET CONFIRM OFF;")
     return regels

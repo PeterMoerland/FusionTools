@@ -281,13 +281,30 @@ class ScriptTest(unittest.TestCase):
             "ATTRIBUTE C3 GPN 'GPC0402104';",
             "EDIT DRV.mod;",
             "ATTRIBUTE R1 GPN 'GPR0402103';",
-            "EDIT STEP.mod;",
-            "EDIT .S1;",
+            "EDIT STEP.m1;",
             "ATTRIBUTE C3 GPN 'GPC0402103';",
-            "EDIT .S2;",
+            "EDIT STEP.m2;",
             "ATTRIBUTE C5 GPN 'GPC0402105';",
+            "EDIT .S1;",
             "SET CONFIRM OFF;",
         ])
+
+    def test_bestaand_gpn_dat_niet_past(self):
+        # C2 op het hoofdschema (22uF 0805) kreeg per ongeluk het GPN van de module-C2 (100nF 0402).
+        tabel = [comp("GPC0402104", "C", "0402", 1e-07, "100 nF", tolerantie="10", spanning="50V", dielectricum="X7R"),
+                 comp("GPC0805226", "C", "0805", 22e-6, "22 uF", tolerantie="20", spanning="10V", dielectricum="X5R")]
+        uitkomsten = standaard.controleer([
+            standaard.Onderdeel("C2", "22uF/10V(20%)", "CAPC2012X135", gpn="GPC0402104", package_size="0805"),
+            standaard.Onderdeel("C3", "100nF/50V(10%)", "CAPC1005X60", gpn="GPC0402104", package_size="0402"),
+            standaard.Onderdeel("C4", "4.7nF/50V", "CAPC1005X60", gpn="GPC0402104", package_size="0402"),
+        ], tabel)
+        per_naam = {u.naam: u for u in uitkomsten}
+        self.assertEqual(per_naam["C2"].status, "voorstel")
+        self.assertEqual(per_naam["C2"].voorstel, "GPC0805226")
+        self.assertIn("past niet", per_naam["C2"].toelichting)
+        self.assertEqual(per_naam["C3"].status, "standaard")
+        self.assertEqual(per_naam["C4"].status, "geen")
+        self.assertIn("Wissen", per_naam["C4"].toelichting)
         # Zonder plek: de naam na de dubbele punt op het blad dat open staat.
         self.assertEqual(standaard.wis_regels(["STEP:C3"]),
                          ["SET CONFIRM YES;", "ATTRIBUTE C3 GPN DELETE;", "SET CONFIRM OFF;"])
