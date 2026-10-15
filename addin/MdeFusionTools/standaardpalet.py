@@ -199,8 +199,8 @@ def _onderdelen_schema(schema):
     # name"). Daarom per module de parts en hun bladen apart.
     global _bladen
     _bladen = {}
-    module_van = {}   # id(part) -> modulenaam, voor de parts die uit een module komen
-    module_parts = []
+    hoofd_parts = {}   # naam -> part op het hoofdschema (eerste blad waar hij staat)
+    module_parts = []  # (part, modulenaam), per module elke naam een keer
     try:
         bladen = schema.sheets
         for i in range(bladen.count):
@@ -208,8 +208,12 @@ def _onderdelen_schema(schema):
             nummer = blad.number
             delen = blad.parts
             for j in range(delen.count):
-                _bladen.setdefault(delen.item(j).name, standaard.Plek(delen.item(j).name, nummer))
-        instellingen.log(f"Schema: {bladen.count} bladen, {len(_bladen)} parts op het hoofdschema.")
+                part = delen.item(j)
+                naam = part.name or ""
+                if naam and naam not in hoofd_parts:
+                    hoofd_parts[naam] = part
+                    _bladen[naam] = standaard.Plek(naam, nummer)
+        instellingen.log(f"Schema: {bladen.count} bladen, {len(hoofd_parts)} parts op het hoofdschema.")
     except Exception:
         instellingen.log("Bladen van het schema niet leesbaar:\n" + traceback.format_exc())
     try:
@@ -228,31 +232,30 @@ def _onderdelen_schema(schema):
             except Exception:
                 instellingen.log(f"Bladen van module {modulenaam} niet leesbaar:\n" + traceback.format_exc())
             delen = module.parts
+            gezien = set()
             for j in range(delen.count):
                 part = delen.item(j)
                 naam = part.name or ""
+                if not naam or naam in gezien:
+                    continue
+                gezien.add(naam)
                 _bladen[f"{modulenaam}:{naam}"] = standaard.Plek(naam, per_blad.get(naam), modulenaam)
                 module_parts.append((part, modulenaam))
         instellingen.log(f"Schema: {modules.count} modules, {len(module_parts)} parts daarin.")
     except Exception:
         instellingen.log("Modules van het schema niet leesbaar:\n" + traceback.format_exc())
 
-    # De parts van het hoofdschema zijn die van schema.parts die op een hoofdblad
-    # staan; wat daar niet op staat en wel in een module zit, hoort bij de module.
-    hoofdnamen = {sleutel for sleutel, plek in _bladen.items() if not plek.module}
-    te_lezen = []
-    parts = schema.parts
-    aantal = parts.count
-    for i in range(aantal):
-        part = parts.item(i)
-        try:
-            naam = part.name or ""
-        except Exception:
-            continue
-        if naam in hoofdnamen or not module_parts:
-            te_lezen.append((part, ""))
+    # schema.parts bevat ook de parts uit modules, onder hun lokale naam; die
+    # zijn niet van de hoofd-parts te onderscheiden. Daarom komt het hoofdschema
+    # uit zijn eigen bladen en elke module uit zijn eigen parts. Alleen als er
+    # geen bladen te lezen waren, valt het terug op schema.parts.
+    te_lezen = [(part, "") for part in hoofd_parts.values()]
+    if not te_lezen:
+        parts = schema.parts
+        for i in range(parts.count):
+            te_lezen.append((parts.item(i), ""))
     te_lezen += module_parts
-    instellingen.log(f"Schema: {aantal} parts in totaal, {len(te_lezen)} te lezen.")
+    instellingen.log(f"Schema: {len(hoofd_parts)} parts op het hoofdschema, {len(module_parts)} in modules.")
 
     resultaat = []
     for i, (part, modulenaam) in enumerate(te_lezen):
